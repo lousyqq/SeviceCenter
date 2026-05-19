@@ -1,0 +1,2022 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代辦中心 (雙主題完整功能版)</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+    <!-- ⭐ Chart.js 與 DataLabels 插件 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+
+    <script>
+        // 頁面載入時檢查深色模式設定，避免閃爍
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark')
+        } else {
+            document.documentElement.classList.remove('dark')
+        }
+
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'], mono: ['ui-monospace', 'monospace'] }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* 捲軸設計：支援亮暗色 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
+
+        .dark ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* 凍結窗格陰影 */
+        .sticky-left-shadow {
+            box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .dark .sticky-left-shadow {
+            box-shadow: 4px 0 10px -2px rgba(0, 0, 0, 0.4);
+        }
+
+        .sticky-right-shadow {
+            box-shadow: -4px 0 8px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .dark .sticky-right-shadow {
+            box-shadow: -4px 0 10px -2px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 解決深色模式下 Chrome 自動填入變成白色的問題 */
+        .dark input:-webkit-autofill {
+            -webkit-box-shadow: 0 0 0 30px #020617 inset !important;
+            -webkit-text-fill-color: #f8fafc !important;
+        }
+
+        /* 移除卡頓的過渡動畫 */
+        .preload * {
+            -webkit-transition: none !important;
+            -moz-transition: none !important;
+            -ms-transition: none !important;
+            -o-transition: none !important;
+            transition: none !important;
+        }
+
+        @keyframes slideInUp {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+
+            to {
+                opacity: 0;
+            }
+        }
+
+        .toast-enter {
+            animation: slideInUp 0.3s ease-out forwards;
+        }
+
+        .toast-leave {
+            animation: fadeOut 0.3s ease-out forwards;
+        }
+
+        /* ⭐ 統計面板專用樣式 */
+        .hidden-view {
+            display: none !important;
+        }
+
+        .stats-table-container {
+            max-width: 100%;
+            overflow-x: auto;
+            /* ⭐ 已移除 overflow-y 和 max-height，現在不會有表格內的垂直卷軸了 */
+        }
+
+            .stats-table-container th.sticky-col, .stats-table-container td.sticky-col {
+                position: sticky;
+                left: 0;
+                z-index: 20;
+            }
+
+            .stats-table-container thead th {
+                position: sticky;
+                top: 0;
+                z-index: 21;
+                box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            }
+
+                .stats-table-container thead th.sticky-col {
+                    z-index: 22;
+                }
+    </style>
+</head>
+<body class="preload bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-200 font-sans min-h-screen flex flex-col antialiased selection:bg-blue-200 selection:text-blue-900 dark:selection:bg-sky-500/30 dark:selection:text-sky-200 transition-colors duration-300">
+
+    <!-- 頂部資訊板 -->
+    <div class="bg-white dark:bg-gradient-to-r dark:from-slate-900 dark:to-slate-800 shrink-0 shadow-sm dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] border-b border-slate-200 dark:border-slate-800 z-40 relative overflow-hidden transition-colors duration-300">
+        <div class="absolute top-0 right-0 w-[600px] h-full bg-gradient-to-l from-blue-50/80 to-transparent pointer-events-none dark:hidden"></div>
+        <div class="absolute -top-10 left-[40%] w-[400px] h-[200px] bg-gradient-to-b from-indigo-50/50 to-transparent blur-3xl pointer-events-none dark:hidden"></div>
+
+        <div class="max-w-[1800px] w-full mx-auto px-4 sm:px-6 relative">
+            <header class="flex items-center justify-between py-4">
+                <div class="flex items-center gap-3.5">
+                    <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 dark:bg-none dark:bg-sky-500/10 shadow-md border border-transparent dark:border-sky-500/30 transition-all">
+                        <i data-lucide="cpu" class="w-5 h-5 text-white dark:text-sky-400"></i>
+                    </div>
+                    <div class="flex flex-col">
+                        <h1 class="text-xl font-extrabold text-slate-900 dark:text-white tracking-wide leading-none mb-1 transition-colors">代辦中心</h1>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 font-medium dark:font-mono dark:uppercase dark:tracking-widest transition-colors">GenAI Empowered Task Control</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <!-- 淺色/深色模式切換按鈕 -->
+                    <button onclick="toggleTheme()" class="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-amber-500 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-sky-400 border border-slate-200 dark:border-slate-700 shadow-sm transition-transform hover:rotate-12 flex items-center justify-center" title="切換顯示模式">
+                        <i data-lucide="sun" class="w-4 h-4 block dark:hidden fill-current"></i>
+                        <i data-lucide="moon" class="w-4 h-4 hidden dark:block fill-current"></i>
+                    </button>
+
+                    <div class="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-800 dark:border-slate-700 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shadow-sm">
+                        <div class="text-right hidden sm:block">
+                            <p class="text-xs font-bold text-slate-700 dark:text-white leading-tight">廠區高階主管</p>
+                            <p class="text-[10px] text-emerald-500 font-bold dark:font-mono dark:uppercase tracking-wide">● Online</p>
+                        </div>
+                        <div class="w-8 h-8 rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                            <i data-lucide="user" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </header>
+        </div>
+    </div>
+
+    <!-- 內容區 -->
+    <main id="mainView" class="flex-1 px-4 sm:px-6 pt-5 pb-12 max-w-[1800px] w-full mx-auto flex flex-col gap-4">
+
+        <!-- KPI 數據卡片 -->
+        <div id="kpi-container" class="flex flex-row gap-4 overflow-x-auto hide-scrollbar shrink-0 pb-1"></div>
+
+        <!-- 核心控制列與表格 -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm dark:shadow-[0_4px_25px_rgba(0,0,0,0.3)] border border-slate-200 dark:border-slate-800 flex flex-col flex-1 overflow-hidden transition-colors duration-300">
+
+            <!-- 控制列 -->
+            <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 z-20 transition-colors duration-300">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 mr-2 hidden sm:flex">
+                        <i data-lucide="layout-list" class="w-4 h-4 text-blue-600 dark:text-sky-400"></i>
+                        <h2 class="text-[14px] font-bold text-slate-800 dark:text-white whitespace-nowrap tracking-wide">任務清單</h2>
+                    </div>
+
+                    <div class="relative group">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-blue-500 dark:group-focus-within:text-sky-400 transition-colors"></i>
+                        <input type="text" id="search-input" placeholder="搜尋申請人、需求..." class="pl-9 pr-4 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-400 dark:focus:border-sky-500 focus:ring-1 focus:ring-blue-100 dark:focus:ring-sky-500 rounded-lg text-[13px] text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 outline-none transition-all w-56 focus:w-72 font-medium dark:shadow-inner" oninput="handleSearch(this.value)" />
+                    </div>
+
+                    <div class="relative">
+                        <select id="status-filter" onchange="handleStatusFilter(this.value)" class="text-[13px] px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-blue-400 dark:focus:border-sky-500 focus:ring-1 focus:ring-blue-100 dark:focus:ring-sky-500 rounded-lg text-slate-700 dark:text-slate-300 outline-none cursor-pointer font-medium appearance-none pr-8 transition-all dark:shadow-inner">
+                            <option value="All">全部狀態</option>
+                            <option value="已上線">已上線</option>
+                            <option value="處理中">處理中</option>
+                            <option value="確認中">確認中</option>
+                        </select>
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <input type="file" id="excel-upload" accept=".xlsx" class="hidden" onchange="handleExcelImport(event)">
+                    <button onclick="document.getElementById('excel-upload').click()" class="flex items-center gap-1.5 px-4 py-1.5 text-[12px] font-bold rounded-lg text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 dark:text-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:hover:text-white dark:hover:bg-slate-700 transition-colors shadow-sm active:scale-95">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> 匯入 Excel
+                    </button>
+                    <button onclick="exportToExcel()" class="flex items-center gap-1.5 px-4 py-1.5 text-[12px] font-bold rounded-lg text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 dark:text-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:hover:text-white dark:hover:bg-slate-700 transition-colors shadow-sm active:scale-95">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> 匯出 Excel
+                    </button>
+
+                    <!-- ⭐ 統計報表按鈕 -->
+                    <button onclick="openStatsView()" class="flex items-center gap-1.5 px-4 py-1.5 text-[12px] font-bold rounded-lg text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 dark:text-purple-300 dark:bg-purple-900/30 dark:border-purple-800 dark:hover:text-white dark:hover:bg-purple-800 transition-colors shadow-sm active:scale-95">
+                        <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i> 統計報表
+                    </button>
+
+                    <button onclick="openModal('add')" class="flex items-center gap-1.5 px-5 py-1.5 text-[12px] font-bold rounded-lg text-white bg-blue-600 hover:bg-blue-700 dark:bg-sky-600 dark:hover:bg-sky-500 shadow-sm dark:shadow-[0_0_12px_rgba(14,165,233,0.3)] dark:border dark:border-sky-500 transition-all active:scale-95 ml-1">
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i> 新增需求
+                    </button>
+
+                    <div class="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden sm:block"></div>
+
+                    <div class="flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shrink-0">
+                        <button id="btn-view-table" onclick="setView('table')" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-white text-blue-600 border border-slate-200/50 dark:bg-slate-800 dark:text-sky-400 dark:border-slate-700 shadow-sm transition-colors">
+                            <i data-lucide="list" class="w-3.5 h-3.5"></i> 總覽
+                        </button>
+                        <button id="btn-view-card" onclick="setView('card')" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors bg-transparent border border-transparent">
+                            <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i> 卡片
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 表格容器 -->
+            <div id="content-container" class="w-full relative bg-white dark:bg-slate-900 transition-colors duration-300"></div>
+
+            <!-- 分頁列 -->
+            <div id="pagination-container" class="border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 rounded-b-2xl z-20 relative transition-colors duration-300"></div>
+
+        </div>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- ⭐ 統計報表區塊 (預設隱藏的全螢幕覆蓋層) -->
+    <!-- ========================================== -->
+    <div id="statsView" class="hidden-view fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-950 overflow-y-auto pt-4 pb-12 px-4 sm:px-6 transition-colors duration-300">
+        <div class="max-w-[1800px] w-full mx-auto space-y-6">
+
+            <!-- 報表上方控制列 -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm dark:shadow-[0_4px_25px_rgba(0,0,0,0.3)] border border-slate-200 dark:border-slate-800 p-5 flex flex-wrap gap-4 items-center justify-between transition-colors duration-300">
+                <div class="flex items-center gap-4 flex-wrap">
+                    <div class="flex items-center gap-2 text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-3 py-1.5 rounded-lg border border-purple-100 dark:border-purple-800/50">
+                        <i data-lucide="bar-chart-2" class="w-5 h-5"></i>
+                        <h2 class="text-lg font-bold">資料彙整與統計</h2>
+                    </div>
+                    <div class="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-1"></div>
+
+                    <!-- ⭐ 月份區間篩選器 -->
+                    <div class="flex items-center gap-2 transition-opacity duration-300" id="stats-date-filter-container">
+                        <label class="text-sm font-medium text-slate-600 dark:text-slate-300">月份區間：</label>
+                        <select id="stats-start-month" onchange="updateStats()" class="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-purple-500 outline-none bg-slate-50 dark:bg-slate-950 shadow-sm transition-colors cursor-pointer min-w-[100px]"></select>
+                        <span class="text-slate-500 dark:text-slate-400 font-medium">~</span>
+                        <select id="stats-end-month" onchange="updateStats()" class="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-purple-500 outline-none bg-slate-50 dark:bg-slate-950 shadow-sm transition-colors cursor-pointer min-w-[100px]"></select>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="closeStatsView()" class="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-sm font-medium shadow-sm transition-colors focus:ring-2 focus:ring-slate-300">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i> 返回任務清單
+                    </button>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- 報表內容 1: 月度註冊與狀態統計 -->
+            <!-- ========================================== -->
+            <div id="report-monthly" class="report-content flex flex-col gap-5 transition-opacity duration-300">
+
+                <!-- 上方統計數量卡片 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 flex items-center gap-4 transition-colors">
+                        <div class="p-3.5 bg-blue-50 dark:bg-sky-500/10 text-blue-600 dark:text-sky-400 rounded-xl border border-blue-100 dark:border-sky-500/20"><i data-lucide="file-text" class="w-6 h-6"></i></div>
+                        <div>
+                            <p class="text-[12px] text-slate-500 dark:text-slate-400 font-bold tracking-wide">總案件申請數</p>
+                            <p class="text-[28px] font-black text-slate-800 dark:text-white leading-none mt-1" id="summary-total-cases">0</p>
+                        </div>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 flex items-center gap-4 transition-colors">
+                        <div class="p-3.5 bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl border border-purple-100 dark:border-purple-500/20"><i data-lucide="plug" class="w-6 h-6"></i></div>
+                        <div>
+                            <p class="text-[12px] text-slate-500 dark:text-slate-400 font-bold tracking-wide">總插頭申請數</p>
+                            <p class="text-[28px] font-black text-slate-800 dark:text-white leading-none mt-1" id="summary-total-plugs">0</p>
+                        </div>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 flex items-center gap-4 transition-colors">
+                        <div class="p-3.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl border border-emerald-100 dark:border-emerald-500/20"><i data-lucide="check-circle-2" class="w-6 h-6"></i></div>
+                        <div>
+                            <p class="text-[12px] text-slate-500 dark:text-slate-400 font-bold tracking-wide">插頭已上線</p>
+                            <p class="text-[28px] font-black text-slate-800 dark:text-white leading-none mt-1" id="summary-plugs-online">0</p>
+                        </div>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 flex items-center gap-4 transition-colors">
+                        <div class="p-3.5 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl border border-amber-100 dark:border-amber-500/20"><i data-lucide="clock" class="w-6 h-6"></i></div>
+                        <div>
+                            <p class="text-[12px] text-slate-500 dark:text-slate-400 font-bold tracking-wide">插頭進行中</p>
+                            <p class="text-[28px] font-black text-slate-800 dark:text-white leading-none mt-1" id="summary-plugs-wip">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 圖表與表格區塊 -->
+                <div class="flex flex-col gap-5">
+                    <!-- 上半部：表格 -->
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col transition-colors">
+                        <div class="flex items-center gap-2 mb-4">
+                            <i data-lucide="table" class="w-5 h-5 text-slate-400 dark:text-slate-500"></i>
+                            <h3 class="text-base font-bold text-slate-800 dark:text-white">月度註冊與狀態統計表</h3>
+                        </div>
+                        <div class="stats-table-container border border-slate-200 dark:border-slate-700 rounded-xl shadow-inner flex-1 bg-white dark:bg-slate-900 custom-scrollbar">
+                            <table class="min-w-full text-sm text-center border-collapse">
+                                <thead>
+                                    <tr id="tableHeader" class="text-slate-600 dark:text-slate-300 font-bold whitespace-nowrap bg-slate-50 dark:bg-slate-800/80 tracking-wide">
+                                        <!-- JS 動態生成 -->
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody" class="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">
+                                    <!-- JS 動態生成 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 下半部：圖表 -->
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col transition-colors">
+                        <div class="flex items-center gap-2 mb-4">
+                            <i data-lucide="bar-chart-horizontal" class="w-5 h-5 text-slate-400 dark:text-slate-500"></i>
+                            <h3 class="text-base font-bold text-slate-800 dark:text-white">狀態分佈與累積趨勢圖 <span class="text-xs font-medium text-slate-400 dark:text-slate-500 ml-2 tracking-wide">(柱狀圖堆疊顯示)</span></h3>
+                        </div>
+                        <div class="relative h-[350px] w-full mt-2">
+                            <canvas id="comboChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ⭐ 報表內容 2: 插座與 Module 統計 (與報表1同頁顯示) -->
+            <!-- ========================================== -->
+            <div id="report-dept" class="report-content flex flex-col gap-5 transition-opacity duration-300 border-t-2 border-slate-200 dark:border-slate-800 pt-6">
+
+                <!-- 標題 -->
+                <div class="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-800/50 w-max">
+                    <i data-lucide="pie-chart" class="w-5 h-5"></i>
+                    <h2 class="text-lg font-bold">插座與 Module 使用統計 <span class="text-sm font-medium tracking-wide">(僅統計已上線狀態)</span></h2>
+                </div>
+
+                <!-- 上方資料彙總卡片 -->
+                <div class="flex flex-col gap-3">
+                    <div id="dept-summary-cards" class="flex flex-wrap gap-4">
+                        <!-- JS 動態生成 -->
+                    </div>
+                </div>
+
+                <!-- 中間：交叉統計表格 -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col transition-colors">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i data-lucide="table" class="w-5 h-5 text-slate-400 dark:text-slate-500"></i>
+                        <h3 class="text-base font-bold text-slate-800 dark:text-white">各插座與 Module 使用數量統計表</h3>
+                    </div>
+                    <div class="stats-table-container border border-slate-200 dark:border-slate-700 rounded-xl shadow-inner flex-1 bg-white dark:bg-slate-900 custom-scrollbar">
+                        <table class="min-w-full text-sm text-center border-collapse">
+                            <thead>
+                                <tr id="deptTableHeader" class="text-slate-600 dark:text-slate-300 font-bold whitespace-nowrap bg-slate-50 dark:bg-slate-800/80 tracking-wide">
+                                </tr>
+                            </thead>
+                            <tbody id="deptTableBody" class="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 下半部：堆疊柱狀圖與資料彙總 -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col transition-colors">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i data-lucide="bar-chart-horizontal" class="w-5 h-5 text-slate-400 dark:text-slate-500"></i>
+                        <h3 class="text-base font-bold text-slate-800 dark:text-white">各插座 MODULE 使用插頭數量統計 <span class="text-xs font-medium text-slate-400 dark:text-slate-500 ml-2 tracking-wide">(由左至右依總數量遞減排序，顏色區塊代表不同 Module)</span></h3>
+                    </div>
+
+                    <div class="relative h-[400px] w-full mt-2">
+                        <canvas id="deptChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- Toast 通知容器 -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-[120] flex flex-col gap-3 pointer-events-none"></div>
+
+    <!-- CRUD Modal -->
+    <div id="crud-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+        <div class="absolute inset-0 bg-slate-900/40 dark:bg-black/70 backdrop-blur-sm transition-opacity" onclick="closeModal('crud-modal')"></div>
+        <div id="crud-modal-content" class="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl dark:shadow-[0_0_40px_rgba(0,0,0,0.8)] w-full max-w-4xl flex flex-col transform transition-all scale-95 opacity-0 duration-200 max-h-[90vh] overflow-hidden">
+            <div class="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900 transition-colors">
+                <h3 id="modal-title" class="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2"></h3>
+                <button type="button" onclick="closeModal('crud-modal')" class="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-slate-800 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar">
+                <form id="crud-form" onsubmit="saveData(event)" class="space-y-6">
+                    <input type="hidden" id="modal-mode" value="add">
+                    <input type="hidden" id="modal-regid" value="">
+
+                    <div>
+                        <h4 class="text-[11px] font-bold text-slate-500 dark:text-sky-400 tracking-widest mb-3 border-b border-slate-200 dark:border-slate-800 pb-2">基礎資訊 Base Info</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div class="relative"><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">DEPT <span class="text-rose-500">*</span></label><input type="text" id="form-dept" required class="w-full px-3 py-2 border rounded-md outline-none bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:bg-white focus:border-blue-400 dark:focus:border-sky-500 transition-all text-slate-900 dark:text-slate-200 dark:placeholder-slate-600 disabled:opacity-50"></div>
+                            <div class="relative"><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">SECTION <span class="text-rose-500">*</span></label><input type="text" id="form-sec" required class="w-full px-3 py-2 border rounded-md outline-none bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:bg-white focus:border-blue-400 dark:focus:border-sky-500 transition-all text-slate-900 dark:text-slate-200 dark:placeholder-slate-600 disabled:opacity-50"></div>
+                            <div class="relative"><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">申請人 <span class="text-rose-500">*</span></label><input type="text" id="form-owner" required class="w-full px-3 py-2 border rounded-md outline-none bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:bg-white focus:border-blue-400 dark:focus:border-sky-500 transition-all text-slate-900 dark:text-slate-200 dark:placeholder-slate-600 disabled:opacity-50"></div>
+
+                            <!-- 新增完成日期欄位 (已限制為只能下拉點選) -->
+                            <div class="relative">
+                                <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">完成日期</label>
+                                <input type="date" id="form-comp-date" onclick="this.showPicker()" onkeydown="return false" class="w-full px-3 py-2 border rounded-md outline-none bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:bg-white focus:border-blue-400 dark:focus:border-sky-500 transition-all text-slate-900 dark:text-slate-200 disabled:opacity-50 cursor-pointer">
+                            </div>
+                        </div>
+                        <div class="relative"><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">需求摘要 <span class="text-rose-500">*</span></label><textarea id="form-desc" required rows="2" class="w-full px-3 py-2 border rounded-md outline-none bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:bg-white focus:border-blue-400 dark:focus:border-sky-500 transition-all text-slate-900 dark:text-slate-200 dark:placeholder-slate-600 disabled:opacity-50 resize-none"></textarea></div>
+                    </div>
+
+                    <div id="edit-advanced-section" class="hidden space-y-6">
+                        <div>
+                            <h4 class="text-[11px] font-bold text-slate-500 dark:text-sky-400 tracking-widest mb-3 border-b border-slate-200 dark:border-slate-800 pb-2">執行與追蹤 Tracking</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">STATUS</label><select id="form-status" class="w-full px-3 py-2 border rounded-md outline-none bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 focus:border-blue-400 dark:focus:border-sky-500"><option value="確認中">確認中</option><option value="處理中">處理中</option><option value="已上線">已上線</option></select></div>
+
+                                <!-- 處理人員對應 DB: Applicant -->
+                                <div><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">處理人員</label><input type="text" id="form-applicant" class="w-full px-3 py-2 border rounded-md outline-none bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 focus:border-blue-400 dark:focus:border-sky-500"></div>
+
+                                <div><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">效益(MP/年)</label><input type="number" step="0.0001" id="form-benefit" class="w-full px-3 py-2 border rounded-md outline-none bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 focus:border-blue-400 dark:focus:border-sky-500"></div>
+                                <div class="col-span-1 md:col-span-3">
+                                    <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">DBCat (按 Enter 新增)</label>
+                                    <div class="flex flex-col gap-2 px-3 py-2 border rounded-md bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus-within:border-blue-400 dark:focus-within:border-sky-500 transition-colors shadow-sm dark:shadow-inner min-h-[38px]">
+                                        <div id="dbcat-tags-container" class="flex flex-wrap gap-1.5 empty:hidden"></div>
+                                        <input type="text" id="form-dbcat-input" placeholder="輸入完請按 Enter..." class="w-full text-sm bg-transparent outline-none text-slate-900 dark:text-slate-200 placeholder-slate-400">
+                                    </div>
+                                </div>
+                                <div><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">TCD</label><input type="text" id="form-tcd" class="w-full px-3 py-2 border rounded-md outline-none bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 focus:border-blue-400 dark:focus:border-sky-500"></div>
+                                <div><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">App LINK</label><input type="text" id="form-applink" class="w-full px-3 py-2 border rounded-md outline-none bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200 focus:border-blue-400 dark:focus:border-sky-500"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="text-[11px] font-bold text-slate-500 dark:text-sky-400 tracking-widest mb-3 border-b border-slate-200 dark:border-slate-800 pb-2">Data Source (SQL)</h4>
+                            <textarea id="form-datasource" rows="3" class="w-full px-4 py-3 border rounded-md outline-none bg-slate-50 dark:bg-[#020617] border-slate-200 dark:border-slate-800 text-slate-900 dark:text-emerald-400 font-mono text-[13px] shadow-inner focus:border-blue-400 dark:focus:border-sky-500 transition-colors"></textarea>
+                        </div>
+                        <div>
+                            <h4 class="text-[11px] font-bold text-slate-500 dark:text-sky-400 tracking-widest mb-3 border-b border-slate-200 dark:border-slate-800 pb-2">機台站點設定 Stations</h4>
+                            <div id="form-stations-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+                        </div>
+                    </div>
+
+                    <div class="pt-5 flex gap-3 justify-end border-t border-slate-100 dark:border-slate-800 mt-2">
+                        <button type="button" onclick="closeModal('crud-modal')" class="px-5 py-2 text-sm font-bold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">取消</button>
+                        <button type="submit" class="px-6 py-2 text-sm font-bold rounded-lg text-white bg-blue-600 hover:bg-blue-700 dark:bg-sky-600 dark:hover:bg-sky-500 shadow-sm dark:shadow-[0_0_12px_rgba(14,165,233,0.3)] border border-transparent dark:border-sky-500 transition-all active:scale-95">儲存變更</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- SQL Viewer Modal -->
+    <div id="sql-modal" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm transition-opacity" onclick="closeModal('sql-modal')"></div>
+        <div id="sql-modal-content" class="relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl dark:shadow-[0_0_30px_rgba(0,0,0,0.9)] border border-slate-200 dark:border-slate-700 w-full max-w-3xl transform transition-all scale-95 opacity-0 duration-200 overflow-hidden">
+            <div class="flex justify-between items-center px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900">
+                <h3 class="text-sm font-bold text-blue-600 dark:text-sky-400 flex items-center gap-2">
+                    <i data-lucide="code" class="w-4 h-4"></i> Data Source
+                </h3>
+                <button onclick="closeModal('sql-modal')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="p-5 overflow-x-auto max-h-[70vh] bg-slate-50 dark:bg-[#020617]">
+                <pre><code id="sql-viewer-code" class="text-[13px] font-mono text-indigo-600 dark:text-emerald-400 whitespace-pre-wrap break-all leading-relaxed"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 移除載入防閃爍 class
+        window.addEventListener('load', function () {
+            document.body.classList.remove('preload');
+        });
+
+        Chart.register(ChartDataLabels);
+
+        // ===== 主題切換邏輯 (Light / Dark) =====
+        function toggleTheme() {
+            const htmlClasses = document.documentElement.classList;
+            if (htmlClasses.contains('dark')) {
+                htmlClasses.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                htmlClasses.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            if (!document.getElementById('statsView').classList.contains('hidden-view') && typeof renderChart === 'function') {
+                updateStats();
+            }
+        }
+
+        // ===== 初始化與全域變數 =====
+        let appData = [];
+        let isPreviewMode = false;
+        const stationColumns = ['DF1', 'DF2', 'DF3', 'DF4', 'ET1', 'ET2', 'ET3', 'ET4', 'LT3', 'LT4', 'TF1', 'TF2', 'TF3', 'TF4', 'TF5', 'TF6', 'PTI'];
+
+        // ⭐ 新增 columnFilters 到全域狀態中
+        const state = { view: 'table', searchTerm: '', statusFilter: 'All', sortConfig: { key: 'regId', direction: 'desc' }, currentPage: 1, itemsPerPage: 30, columnFilters: {} };
+
+        // ⭐ 新增欄位篩選控制函式
+        function setColumnFilter(key, value) {
+            if (!state.columnFilters) state.columnFilters = {};
+            state.columnFilters[key] = value;
+            state.currentPage = 1;
+            renderContent();
+            renderPagination();
+        }
+
+        let currentDbCats = [];
+
+        function renderDbCatTags() {
+            const container = document.getElementById('dbcat-tags-container');
+            container.innerHTML = currentDbCats.map((tag, i) => `
+                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[11px] font-bold shadow-sm">
+                            ${tag} <i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-purple-900 dark:hover:text-white" onclick="removeDbCat(${i})"></i>
+                        </span>
+                    `).join('');
+            lucide.createIcons();
+        }
+
+        function addDbCat(val) {
+            const tag = val.trim();
+            if (tag && !currentDbCats.includes(tag)) {
+                currentDbCats.push(tag);
+                renderDbCatTags();
+            }
+        }
+
+        function removeDbCat(idx) {
+            currentDbCats.splice(idx, 1);
+            renderDbCatTags();
+        }
+
+        function mapDBtoFrontend(data) {
+            return data.map(row => {
+                let flatItem = { ...row };
+                stationColumns.forEach(col => flatItem[col.toLowerCase()] = '');
+                if (row.stations && row.stations.length > 0) {
+                    row.stations.forEach(st => {
+                        const colName = st.stationName.toLowerCase();
+                        const mp = st.mpValue || '';
+                        const url = st.urlLink || '';
+                        flatItem[colName] = (mp || url) ? (url ? `${mp}^${url}` : mp) : '';
+                    });
+                }
+                return flatItem;
+            });
+        }
+
+        function recalculateItemNum() {
+            let statusCounters = {};
+            appData.forEach((item) => {
+                if (!statusCounters[item.status]) statusCounters[item.status] = 0;
+                item.itemNum = ++statusCounters[item.status];
+            });
+        }
+
+        async function fetchTasks() {
+            try {
+                let response;
+                try {
+                    response = await fetch('/api/tasks');
+                } catch (e) {
+                    throw new Error('無法解析 URL，自動切換至預覽模式');
+                }
+
+                if (!response.ok) throw new Error('API 回應異常');
+                const data = await response.json();
+                appData = mapDBtoFrontend(data);
+                isPreviewMode = false;
+            } catch (err) {
+                if (!isPreviewMode) {
+                    console.warn("無法連線至 API，已切換為本地預覽模式。", err.message);
+                    isPreviewMode = true;
+                    showToast('預覽模式：已載入測試資料', 'info');
+
+                    const mockDbData = [
+                        { regId: 22, date: '2026-04-29', status: '已上線', owner: '林玉婷', dept: 'PTI', sec: 'ESI', applicant: '劉世仁', desc: '測試：長文字自動斷行顯示，以確保畫面不跑版。', benefit: 0.6, dbCat: 'FDC', appLink: 'http://www.google.com', tcd: 'Notes://example', stations: [{ stationName: 'DF1', mpValue: 'V', urlLink: '' }] },
+                        { regId: 21, date: '2026-02-10', status: '處理中', owner: '黃筱嵐', dept: 'TF5', sec: 'EQ2', applicant: '王大明', desc: 'CROSS_FAB_INLINE_BENCHMARK_RATATA', benefit: 0, dbCat: 'SQL', appLink: 'www.yahoo.com', tcd: '', stations: [] },
+                        { regId: 20, date: '2026-01-15', status: '已上線', owner: '陳思綺', dept: 'LT4', sec: 'EQ1', applicant: '張三', desc: 'E3 FDC_SPEC 設定資料', benefit: 0.2, dbCat: 'FDC', appLink: 'V', tcd: '', stations: [] },
+                        { regId: 19, date: '2025-11-20', status: '確認中', owner: '王小明', dept: 'LT3', sec: 'EQ1', applicant: '陳大文', desc: '歷史測試資料', benefit: 0.5, dbCat: 'SQL', appLink: '', tcd: '', stations: [] },
+                        { regId: 18, date: '2027-01-05', status: '處理中', owner: '李四', dept: 'DF1', sec: 'PE1', applicant: '林志玲', desc: '未來預估資料測試', benefit: 1.2, dbCat: 'API', appLink: '', tcd: '', stations: [] }
+                    ];
+                    let expandedData = [];
+                    for (let i = 0; i < 20; i++) {
+                        mockDbData.forEach(d => { expandedData.push({ ...d, regId: expandedData.length + 1 }); });
+                    }
+                    appData = mapDBtoFrontend(expandedData);
+                }
+            } finally {
+                recalculateItemNum();
+                renderKPI();
+                renderContent();
+                renderPagination();
+            }
+        }
+
+        async function saveData(event) {
+            event.preventDefault();
+            const mode = document.getElementById('modal-mode').value;
+            const today = new Date().toISOString().split('T')[0];
+
+            let targetDate = today;
+            if (mode === 'edit') {
+                const regId = parseInt(document.getElementById('modal-regid').value);
+                const item = appData.find(d => d.regId === regId);
+                if (item && item.date) {
+                    targetDate = item.date;
+                }
+            }
+
+            const payload = {
+                date: targetDate,
+                completionDate: document.getElementById('form-comp-date').value || '',
+                status: mode === 'add' ? '確認中' : document.getElementById('form-status').value,
+                dbCat: currentDbCats.join(','),
+                dept: document.getElementById('form-dept').value,
+                sec: document.getElementById('form-sec').value,
+                owner: document.getElementById('form-owner').value,
+                desc: document.getElementById('form-desc').value,
+                applicant: mode === 'add' ? '' : document.getElementById('form-applicant').value,
+                benefit: mode === 'add' ? 0 : (parseFloat(document.getElementById('form-benefit').value) || 0),
+                tcd: mode === 'add' ? '' : document.getElementById('form-tcd').value,
+                appLink: mode === 'add' ? '' : document.getElementById('form-applink').value,
+                dataSource: mode === 'add' ? '' : document.getElementById('form-datasource').value,
+                stations: []
+            };
+
+            if (mode === 'edit') {
+                stationColumns.forEach(col => {
+                    const mp = document.getElementById(`st-mp-${col}`).value.trim();
+                    const url = document.getElementById(`st-url-${col}`).value.trim();
+                    if (mp || url) {
+                        payload.stations.push({ stationName: col, mpValue: mp, urlLink: url });
+                    }
+                });
+            }
+
+            try {
+                let response;
+                try {
+                    if (mode === 'add') {
+                        response = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    } else {
+                        const regId = document.getElementById('modal-regid').value;
+                        response = await fetch(`/api/tasks/${regId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    }
+                } catch (e) { throw new Error('Local preview mode'); }
+
+                if (!response.ok) throw new Error('API error');
+
+                showToast(mode === 'add' ? '需求已成功建立！同步至 DB' : '資料修改已儲存並同步至 DB！', 'success');
+                if (mode === 'add') { state.sortConfig = { key: 'regId', direction: 'desc' }; state.currentPage = 1; }
+
+                closeModal('crud-modal');
+                await fetchTasks();
+            } catch (err) {
+                if (mode === 'add') {
+                    payload.regId = appData.length > 0 ? Math.max(...appData.map(d => d.regId)) + 1 : 1;
+                    appData.push(mapDBtoFrontend([payload])[0]);
+                    state.sortConfig = { key: 'regId', direction: 'desc' };
+                    state.currentPage = 1;
+                    showToast('[預覽] 需求已成功建立！', 'success');
+                } else {
+                    const regId = parseInt(document.getElementById('modal-regid').value);
+                    payload.regId = regId;
+                    const idx = appData.findIndex(d => d.regId === regId);
+                    if (idx !== -1) appData[idx] = mapDBtoFrontend([payload])[0];
+                    showToast('[預覽] 資料修改已儲存！', 'success');
+                }
+                closeModal('crud-modal');
+                recalculateItemNum();
+                renderKPI();
+                renderContent();
+                renderPagination();
+            }
+        }
+
+        async function deleteData(regId) {
+            if (confirm(`確定要刪除 RegID #${regId} 的需求資料嗎？`)) {
+                try {
+                    let response;
+                    try { response = await fetch(`/api/tasks/${regId}`, { method: 'DELETE' }); } catch (e) { throw new Error('Local preview mode'); }
+                    if (!response.ok) throw new Error('API error');
+
+                    showToast(`已成功刪除項目 #${regId}`, 'info');
+                    await fetchTasks();
+                } catch (err) {
+                    appData = appData.filter(d => d.regId !== regId);
+                    showToast(`[預覽] 已成功刪除項目 #${regId}`, 'info');
+                    recalculateItemNum();
+                    renderKPI();
+                    renderContent();
+                    renderPagination();
+                }
+            }
+        }
+
+        async function handleExcelImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!confirm("⚠️ 警告：匯入 Excel 將會【清空目前資料庫所有資料】，並以 Excel 內容重新建立。\n\n確定要繼續嗎？")) {
+                event.target.value = ''; return;
+            }
+
+            showToast("解析資料中，請稍候...", "info");
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+                    if (rows.length < 2) throw new Error("Excel 檔案沒有資料列！");
+
+                    const headers = rows[0];
+                    const colMap = {};
+                    headers.forEach((h, idx) => {
+                        if (!h) return;
+                        const text = String(h).trim().toLowerCase();
+
+                        if (text.includes('註冊日期') || text === 'date' || text === 'regdate') colMap.date = idx;
+                        else if (text.includes('完成日期') || text.includes('completion')) colMap.compDate = idx;
+
+                        else if (text === 'status' || text.includes('狀態')) colMap.status = idx;
+                        else if (text.includes('dept') || text.includes('department')) colMap.dept = idx;
+                        else if (text.includes('sec') || text.includes('section')) colMap.sec = idx;
+                        else if (text === 'owner' || text.includes('申請人')) colMap.owner = idx;
+                        else if (text === 'applicant' || text.includes('處理人員') || text.includes('負責人')) colMap.applicant = idx;
+                        else if (text.includes('desc') || text.includes('摘要')) colMap.desc = idx;
+                        else if (text.includes('benefit') || text.includes('效益')) colMap.benefit = idx;
+                        else if (text.includes('dbcat')) colMap.dbCat = idx;
+                        else if (text.includes('tcd')) colMap.tcd = idx;
+                        else if (text.includes('applink') || text.includes('app link')) colMap.appLink = idx;
+                        else if (text.includes('datasource') || text.includes('data source')) colMap.dataSource = idx;
+                        stationColumns.forEach(st => { if (text === st.toLowerCase()) colMap[st.toLowerCase()] = idx; });
+                    });
+
+                    if (colMap.desc === undefined) throw new Error("找不到『需求摘要』欄位，請確認 Excel 格式。");
+
+                    const payloads = [];
+                    for (let i = 1; i < rows.length; i++) {
+                        const row = rows[i];
+                        if (!row[colMap.desc]) continue;
+
+                        let stations = [];
+                        stationColumns.forEach(st => {
+                            let val = row[colMap[st.toLowerCase()]];
+                            if (val) {
+                                val = String(val).trim();
+                                let mp = val, url = '';
+                                if (val.includes('^')) { [mp, url] = val.split('^'); } else if (val.startsWith('http') || val.startsWith('Notes://')) { mp = 'Link'; url = val; }
+                                stations.push({ stationName: st, mpValue: mp, urlLink: url });
+                            }
+                        });
+
+                        function parseDateValue(raw) {
+                            if (!raw) return '';
+                            if (typeof raw === 'number') {
+                                const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+                                return d.toISOString().split('T')[0];
+                            }
+                            const str = String(raw).replace(/\//g, '-');
+                            const d = new Date(str);
+                            if (!isNaN(d.getTime())) {
+                                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                            }
+                            return '';
+                        }
+
+                        let dateStr = parseDateValue(row[colMap.date]) || new Date().toISOString().split('T')[0];
+                        let compDateStr = parseDateValue(row[colMap.compDate]);
+
+                        let importedStatus = row[colMap.status] || '確認中';
+                        if (importedStatus === '缺欄位') importedStatus = '確認中';
+
+                        payloads.push({
+                            date: dateStr,
+                            completionDate: compDateStr,
+                            status: importedStatus,
+                            dept: row[colMap.dept] || '',
+                            sec: row[colMap.sec] || '',
+                            owner: row[colMap.owner] || '',
+                            applicant: row[colMap.applicant] || '',
+                            desc: row[colMap.desc] || '',
+                            benefit: parseFloat(row[colMap.benefit]) || 0,
+                            dbCat: String(row[colMap.dbCat] || '').replace(/，/g, ','),
+                            tcd: row[colMap.tcd] || '',
+                            appLink: row[colMap.appLink] || '',
+                            dataSource: row[colMap.dataSource] || '',
+                            stations: stations
+                        });
+                    }
+
+                    let response;
+                    try {
+                        response = await fetch('/api/tasks/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloads) });
+                    } catch (e) { throw new Error('Local preview mode'); }
+
+                    if (!response.ok) throw new Error("伺服器匯入處理失敗，請確認資料庫是否已加上 CompletionDate 欄位。");
+
+                    showToast(`成功匯入 ${payloads.length} 筆資料！`, "success");
+                    await fetchTasks();
+
+                } catch (err) {
+                    if (isPreviewMode) {
+                        appData = mapDBtoFrontend(payloads);
+                        appData.forEach((d, idx) => d.regId = idx + 1);
+                        showToast(`[預覽] 已模擬匯入 ${payloads.length} 筆資料`, "success");
+                        recalculateItemNum(); renderKPI(); renderContent(); renderPagination();
+
+                        if (!document.getElementById('statsView').classList.contains('hidden-view')) {
+                            initStatsDateRange(true);
+                            updateStats();
+                        }
+                    } else {
+                        console.error(err); showToast("匯入失敗：" + err.message, "error");
+                    }
+                } finally {
+                    event.target.value = '';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportToExcel() {
+            const data = getProcessedData();
+            if (data.length === 0) return showToast('目前沒有符合條件的資料可以匯出！', 'error');
+            const headers = ['註冊日期', 'RegID', 'ITEM_NO', 'STATUS', 'DEPT', 'SECTION', '申請人', '需求摘要', '處理人員', 'TCD', '效益(MP/年)', 'DBCat', 'App LINK', 'Data Source', ...stationColumns];
+            const excelData = [headers];
+            data.forEach(row => {
+                excelData.push([row.date, row.regId, row.itemNum, row.status, row.dept, row.sec, row.owner, row.desc, row.applicant, row.tcd, row.benefit || '', row.dbCat, row.appLink, row.dataSource, ...stationColumns.map(c => row[c.toLowerCase()] || '')]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(excelData), wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "任務清單");
+            XLSX.writeFile(wb, `代辦中心資料_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`);
+            showToast('Excel 報表匯出成功！', 'success');
+        }
+
+        function getProcessedData() {
+            let filtered = appData.filter(item => {
+                const term = state.searchTerm.toLowerCase();
+                const matchesSearch = item.desc.toLowerCase().includes(term) ||
+                    (item.owner && item.owner.toLowerCase().includes(term)) ||
+                    item.dept.toLowerCase().includes(term) ||
+                    (item.sec && item.sec.toLowerCase().includes(term)) ||
+                    (item.applicant && item.applicant.toLowerCase().includes(term));
+                const matchesStatus = state.statusFilter === 'All' || item.status === state.statusFilter;
+
+                // ⭐ 逐一檢查欄位過濾器 (Key值篩選)
+                let matchesColumn = true;
+                if (state.columnFilters) {
+                    for (let key in state.columnFilters) {
+                        if (state.columnFilters[key] && state.columnFilters[key].trim() !== '') {
+                            const filterVal = state.columnFilters[key].trim().toLowerCase();
+                            const itemVal = String(item[key] || '').toLowerCase();
+                            if (!itemVal.includes(filterVal)) {
+                                matchesColumn = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                return matchesSearch && matchesStatus && matchesColumn;
+            });
+
+            filtered.sort((a, b) => {
+                let aVal = a[state.sortConfig.key], bVal = b[state.sortConfig.key];
+                if (state.sortConfig.key === 'benefit') { aVal = Number(aVal) || 0; bVal = Number(bVal) || 0; }
+                if (aVal < bVal) return state.sortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return state.sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+            return filtered;
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const config = {
+                success: { icon: 'check-circle', color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10', border: 'border-emerald-200 dark:border-emerald-500/20' },
+                error: { icon: 'alert-circle', color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', border: 'border-rose-200 dark:border-rose-500/20' },
+                info: { icon: 'info', color: 'text-blue-500 dark:text-sky-400', bg: 'bg-blue-50 dark:bg-sky-500/10', border: 'border-blue-200 dark:border-sky-500/20' }
+            }[type];
+            toast.className = `flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-900 border ${config.border} shadow-lg dark:shadow-2xl rounded-xl pointer-events-auto toast-enter`;
+            toast.innerHTML = `<div class="p-1 rounded-full ${config.bg} ${config.color}"><i data-lucide="${config.icon}" class="w-4 h-4"></i></div><p class="text-xs font-bold text-slate-700 dark:text-slate-200 tracking-wide">${message}</p>`;
+            container.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => { toast.classList.replace('toast-enter', 'toast-leave'); setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        function getStatusColorClass(status) {
+            switch (status) {
+                case '已上線': return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-400 dark:border-emerald-400/20';
+                case '處理中': return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-400/10 dark:text-amber-400 dark:border-amber-400/20';
+                case '確認中': return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+                default: return 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600';
+            }
+        }
+
+        function getStatusIconTag(status) {
+            switch (status) {
+                case '已上線': return '<i data-lucide="check-circle" class="w-3.5 h-3.5 mr-1 dark:opacity-90"></i>';
+                case '處理中': return '<i data-lucide="clock" class="w-3.5 h-3.5 mr-1 dark:opacity-90"></i>';
+                default: return '';
+            }
+        }
+
+        function renderKPI() {
+            const filteredData = getProcessedData();
+            const totalBenefit = filteredData.reduce((s, i) => s + (Number(i.benefit) || 0), 0).toFixed(3);
+            const kpis = [
+                { title: "總需求數量", value: appData.length, icon: "database", lightColor: "text-blue-600", lightBg: "bg-blue-50 border-blue-100", darkColor: "dark:text-sky-400", darkBorder: "dark:border-sky-400/30", darkGlow: "bg-sky-400" },
+                { title: "已上線完成", value: appData.filter(d => d.status === '已上線').length, icon: "check-circle", lightColor: "text-emerald-600", lightBg: "bg-emerald-50 border-emerald-100", darkColor: "dark:text-emerald-400", darkBorder: "dark:border-emerald-400/30", darkGlow: "bg-emerald-400" },
+                { title: "處理中專案", value: appData.filter(d => d.status === '處理中').length, icon: "clock", lightColor: "text-amber-600", lightBg: "bg-amber-50 border-amber-100", darkColor: "dark:text-amber-400", darkBorder: "dark:border-amber-400/30", darkGlow: "bg-amber-400" },
+                { title: "確認中專案", value: appData.filter(d => d.status === '確認中').length, icon: "help-circle", lightColor: "text-slate-600", lightBg: "bg-slate-50 border-slate-200", darkColor: "dark:text-slate-400", darkBorder: "dark:border-slate-700", darkGlow: "bg-slate-500" },
+                { title: "預估總效益", value: totalBenefit, icon: "trending-up", lightColor: "text-purple-600", lightBg: "bg-purple-50 border-purple-100", darkColor: "dark:text-purple-400", darkBorder: "dark:border-purple-400/30", darkGlow: "bg-purple-400" },
+            ];
+
+            const kpiCardsHtml = kpis.map((k) => {
+                const isLongValue = String(k.value).length > 8;
+                return `
+                                <div class="flex-1 min-w-[200px] flex items-center justify-between px-5 py-4 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/60 dark:border-slate-800 hover:shadow-md transition-all duration-300 group cursor-default relative overflow-hidden">
+                                    <div class="absolute -right-6 -top-6 w-20 h-20 rounded-full ${k.darkGlow}/10 blur-xl group-hover:scale-150 transition-transform duration-500 hidden dark:block"></div>
+                                    <div class="flex flex-col gap-1 min-w-0 pr-2 relative z-10">
+                                    <p class="text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-wider whitespace-nowrap">${k.title}</p>
+                                    <h3 class="${isLongValue ? 'text-2xl' : 'text-[28px]'} font-black text-slate-800 dark:text-white dark:${k.darkColor} tracking-tight leading-none mt-1 truncate dark:drop-shadow-[0_0_8px_currentColor]" title="${k.value}">${k.value}</h3>
+                                    </div>
+                                    <div class="shrink-0 w-11 h-11 rounded-[12px] ${k.lightBg} ${k.lightColor} border dark:bg-slate-950 ${k.darkColor} ${k.darkBorder} flex items-center justify-center transition-transform group-hover:rotate-3 shadow-sm relative z-10">
+                                    <i data-lucide="${k.icon}" class="w-5 h-5"></i>
+                                    </div>
+                                </div>
+                                `;
+            }).join('');
+
+            document.getElementById('kpi-container').innerHTML = kpiCardsHtml;
+            lucide.createIcons();
+        }
+
+        // ⭐ 優化後的排序與過濾表頭
+        function renderSortHeader(label, sortKey, className) {
+            const isActive = state.sortConfig.key === sortKey;
+            const isAsc = isActive && state.sortConfig.direction === 'asc';
+            const isDesc = isActive && state.sortConfig.direction === 'desc';
+            const filterVal = (state.columnFilters && state.columnFilters[sortKey]) || '';
+            const safeFilterVal = filterVal.replace(/"/g, '&quot;');
+            const hasFilter = filterVal.trim() !== '';
+
+            return `
+                        <th class="px-3 py-2.5 align-middle select-none group border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 hover:bg-[#f1f5f9] dark:hover:bg-slate-800 transition-colors ${className}">
+                            <div class="flex flex-col gap-1 h-full justify-center relative">
+                                <!-- 標題與 Icon 列 -->
+                                <div class="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest">
+                                    <div class="flex items-center cursor-pointer flex-1 ${className.includes('text-center') ? 'justify-center' : ''}" onclick="setSort('${sortKey}')">
+                                        ${label}
+                                        <div class="flex items-center -space-x-[2px] ml-1 transition-opacity">
+                                            <i data-lucide="arrow-up" class="w-[11px] h-[11px] ${isAsc ? 'text-blue-500 dark:text-sky-400 opacity-100' : 'text-blue-300 dark:text-slate-500 opacity-0 group-hover:opacity-100'} transition-all"></i>
+                                            <i data-lucide="arrow-down" class="w-[11px] h-[11px] ${isDesc ? 'text-blue-500 dark:text-sky-400 opacity-100' : 'text-blue-300 dark:text-slate-500 opacity-0 group-hover:opacity-100'} transition-all"></i>
+                                        </div>
+                                    </div>
+                                    <!-- 篩選按鈕 (有數值時常駐亮起，否則 hover 才顯示) -->
+                                    <button onclick="toggleFilter('${sortKey}', event)" class="p-1 ml-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors focus:outline-none ${hasFilter ? 'text-blue-600 dark:text-sky-400 opacity-100' : 'text-slate-300 dark:text-slate-500 opacity-0 group-hover:opacity-100'}">
+                                        <i data-lucide="filter" class="w-3 h-3"></i>
+                                    </button>
+                                </div>
+
+                                <!-- 隱藏的輸入框 -->
+                                <div id="filter-box-${sortKey}" class="${hasFilter ? 'block' : 'hidden'} w-full mt-1 transition-all" onclick="event.stopPropagation()">
+                                    <div class="relative flex items-center">
+                                        <input type="text" id="filter-input-${sortKey}" placeholder="輸入篩選..." value="${safeFilterVal}"
+                                            onkeydown="if(event.key==='Enter') { this.blur(); }"
+                                            onblur="setColumnFilter('${sortKey}', this.value)"
+                                            class="w-full min-w-[60px] text-[11px] font-normal px-2 py-1 pr-6 border border-blue-200 dark:border-sky-500/50 rounded bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500 dark:focus:border-sky-400 focus:ring-1 focus:ring-blue-500/20 dark:focus:ring-sky-500/20 shadow-inner transition-all">
+                                        ${hasFilter ? `
+                                        <button onclick="clearFilter('${sortKey}', event)" class="absolute right-1 text-slate-400 hover:text-rose-500 transition-colors focus:outline-none">
+                                            <i data-lucide="x" class="w-3 h-3"></i>
+                                        </button>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </th>
+                    `;
+        }
+
+        // ⭐ 控制篩選框顯示/隱藏的函式
+        function toggleFilter(key, event) {
+            event.stopPropagation();
+            const box = document.getElementById(`filter-box-${key}`);
+            const input = document.getElementById(`filter-input-${key}`);
+            if (box.classList.contains('hidden')) {
+                box.classList.remove('hidden');
+                setTimeout(() => input.focus(), 50);
+            } else {
+                box.classList.add('hidden');
+            }
+        }
+
+        // ⭐ 一鍵清除篩選值的函式
+        function clearFilter(key, event) {
+            event.stopPropagation();
+            setColumnFilter(key, '');
+        }
+
+        function renderContent() {
+            const filtered = getProcessedData();
+            let currentData;
+            if (state.itemsPerPage === 'All') {
+                currentData = filtered;
+            } else {
+                const startIdx = (state.currentPage - 1) * state.itemsPerPage;
+                currentData = filtered.slice(startIdx, startIdx + state.itemsPerPage);
+            }
+
+            const contentContainer = document.getElementById('content-container');
+
+            if (state.view === 'table') {
+                let stationHeaders = stationColumns.map(col => `<th class="px-2 py-3.5 text-center border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[60px] max-w-[100px] border-l border-slate-100 dark:border-slate-800/50">${col}</th>`).join('');
+
+                let rowsHtml = currentData.map(row => {
+
+                    // 將原本的 DBCat 改為漂亮的 Tag 徽章
+                    let dbCatHtml = `<span class="text-slate-300 dark:text-slate-600">-</span>`;
+                    if (row.dbCat) {
+                        dbCatHtml = String(row.dbCat).split(',').map(cat =>
+                            `<span class="inline-block px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20 text-[10px] font-bold mr-1 mb-1 shadow-sm">${cat.trim()}</span>`
+                        ).join('');
+                    }
+
+                    let stationCells = stationColumns.map(col => {
+                        const val = row[col.toLowerCase()];
+                        if (!val) return `<td class="px-2 py-2.5 text-center border-l border-slate-100 dark:border-slate-800/50"><span class="text-slate-300 dark:text-slate-600 font-medium dark:font-mono">-</span></td>`;
+                        let mp = val, url = ''; if (val.includes('^')) { [mp, url] = val.split('^'); } else if (val.startsWith('http') || val.startsWith('Notes://')) { mp = 'Link'; url = val; }
+                        return `<td class="px-2 py-2.5 text-center min-w-[60px] max-w-[100px] whitespace-normal break-words border-l border-slate-100 dark:border-slate-800/50">
+                                                <div class="inline-flex flex-wrap items-center justify-center gap-1 px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800 w-full group-hover:bg-white dark:group-hover:bg-slate-700">
+                                                    <span class="font-semibold dark:font-mono text-[11px] text-slate-700 dark:text-slate-300 break-all leading-none">${mp}</span>
+                                                    ${url ? `<a href="${url}" target="_blank" class="inline-block ml-1 opacity-60 hover:opacity-100 transition-opacity" onclick="event.stopPropagation()"><i data-lucide="external-link" class="w-3 h-3 text-blue-500 dark:text-sky-400"></i></a>` : ''}
+                                                </div>
+                                            </td>`;
+                    }).join('');
+
+                    let sqlBtn = row.dataSource ? `
+                                            <button onclick="viewSqlModal(${row.regId})" class="text-blue-500 hover:text-blue-700 dark:text-sky-400 dark:hover:text-white" title="檢視語法">
+                                                <i data-lucide="code" class="w-4 h-4 mx-auto"></i>
+                                            </button>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
+
+                    let tcdIcon = row.tcd ? `<i data-lucide="file-text" class="w-4 h-4 text-blue-500 hover:text-blue-700 dark:text-sky-400 dark:hover:text-white mx-auto cursor-pointer" title="開啟連結" onclick="window.open('${row.tcd.startsWith('http') ? row.tcd : '#'}')"></i>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
+
+                    let appLinkUrl = row.appLink && !row.appLink.startsWith('http') && !row.appLink.startsWith('Notes') ? 'http://' + row.appLink : row.appLink;
+                    let appLinkIcon = row.appLink ? `<i data-lucide="link" class="w-4 h-4 text-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-white mx-auto cursor-pointer" title="開啟 App Link" onclick="window.open('${appLinkUrl}')"></i>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
+
+                    let actionHtml = `
+                                          <div class="flex items-center justify-center gap-3 opacity-30 group-hover:opacity-100 transition-opacity">
+                                            <button onclick="openModal('edit', ${row.regId})" class="text-blue-500 hover:text-blue-700 dark:text-sky-400 dark:hover:text-white" title="編輯">
+                                              <i data-lucide="pen-line" class="w-4 h-4"></i>
+                                            </button>
+                                            <button onclick="deleteData(${row.regId})" class="text-rose-400 hover:text-rose-600 dark:hover:text-rose-400" title="刪除">
+                                              <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                            </button>
+                                          </div>
+                                        `;
+
+                    return `
+                                    <tr class="table-row-hover border-b border-slate-50 dark:border-slate-800/50 bg-white dark:bg-transparent group cursor-default">
+                                      <td class="px-3 py-2.5 sticky left-0 z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] text-slate-500 dark:text-slate-400 text-xs dark:font-mono font-medium w-[90px] min-w-[90px] border-r border-slate-100/50 dark:border-slate-800/50">${row.date}</td>
+                                      <td class="px-3 py-2.5 text-center sticky left-[90px] z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] font-mono text-slate-500 dark:text-slate-400 text-xs font-medium w-[90px] min-w-[90px] border-r border-slate-100/50 dark:border-slate-800/50">${row.completionDate || '-'}</td>
+                                      <td class="px-3 py-2.5 text-center sticky left-[180px] z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] font-mono font-semibold text-blue-500 dark:text-sky-400 text-[13px] dark:text-[12px] w-[60px] min-w-[60px] border-r border-slate-100/50 dark:border-slate-800/50">#${row.regId}</td>
+                                      <td class="px-3 py-2.5 text-center sticky left-[240px] z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] font-bold text-emerald-500 dark:text-white text-xs dark:text-[12px] w-[70px] min-w-[70px] sticky-left-shadow">${row.itemNum}</td>
+                                      <td class="px-3 py-2.5 w-[100px] min-w-[100px]">
+                                          <span class="inline-flex items-center px-1.5 py-0.5 rounded-[6px] text-[11px] font-bold border whitespace-nowrap dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${getStatusColorClass(row.status)}">
+                                             ${getStatusIconTag(row.status)} ${row.status}
+                                          </span>
+                                      </td>
+                                      <td class="px-3 py-2.5 min-w-[70px] max-w-[120px] whitespace-normal break-words"><span class="text-[12px] font-semibold text-slate-700 dark:text-slate-200">${row.dept}</span></td>
+                                      <td class="px-3 py-2.5 min-w-[70px] max-w-[120px] whitespace-normal break-words"><span class="text-[12px] font-medium text-slate-500 dark:text-slate-400 dark:font-mono">${row.sec || '-'}</span></td>
+                                      <td class="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300 text-[12px] min-w-[80px] max-w-[150px] whitespace-normal break-words">${row.owner || '-'}</td>
+                                      <td class="px-3 py-2.5 min-w-[350px] max-w-[500px] whitespace-normal break-words leading-relaxed text-slate-600 dark:text-slate-300 text-[13px] dark:text-[12px] font-medium">${row.desc}</td>
+                                      <td class="px-3 py-2.5 text-slate-500 dark:text-slate-400 text-[12px] font-medium min-w-[90px] max-w-[150px] whitespace-normal break-words">${row.applicant || '-'}</td>
+                                      <td class="px-3 py-2.5 text-center min-w-[50px]">${tcdIcon}</td>
+                                      <td class="px-3 py-2.5 text-center min-w-[50px]">${appLinkIcon}</td>
+                                      <td class="px-3 py-2.5 font-semibold dark:font-mono text-right text-xs dark:text-[12px] min-w-[80px] ${row.benefit > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}">${row.benefit > 0 ? row.benefit : '-'}</td>
+                                      <td class="px-3 py-2.5 text-[12px] font-medium dark:font-mono text-slate-400 min-w-[100px] max-w-[200px] text-center whitespace-normal">${dbCatHtml}</td>
+                                      <td class="px-3 py-2.5 text-center min-w-[50px]">${sqlBtn}</td>
+                                      ${stationCells}
+                                      <td class="px-2 py-2.5 sticky right-0 z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] text-center sticky-right-shadow">
+                                        ${actionHtml}
+                                      </td>
+                                    </tr>
+                                  `;
+                }).join('');
+
+                if (currentData.length === 0) {
+                    rowsHtml = `<tr><td colspan="${15 + stationColumns.length}" class="px-4 py-16 text-center text-slate-500 font-bold tracking-widest opacity-60">找不到符合條件的資料。</td></tr>`;
+                }
+
+                contentContainer.innerHTML = `
+                                  <div class="w-full overflow-x-auto bg-white dark:bg-slate-900 rounded-xl dark:rounded-none border border-slate-200 dark:border-none shadow-sm dark:shadow-none">
+                                    <table class="w-full text-left whitespace-nowrap min-w-max border-collapse">
+                                      <thead>
+                                        <tr>
+                                          ${renderSortHeader('註冊日期', 'date', 'sticky left-0 z-30 border-r border-slate-200/60 dark:border-slate-800/50')}
+                                          ${renderSortHeader('完成日期', 'completionDate', 'sticky left-[90px] z-30 border-r border-slate-200/60 dark:border-slate-800/50 min-w-[90px] text-center')}
+                                          ${renderSortHeader('ID', 'regId', 'text-center sticky left-[180px] z-30 border-r border-slate-200/60 dark:border-slate-800/50')}
+                                          ${renderSortHeader('Item No.', 'itemNum', 'text-center sticky left-[240px] z-30 sticky-left-shadow')}
+                                          ${renderSortHeader('Status', 'status', '')}
+                                          ${renderSortHeader('Dept', 'dept', 'min-w-[60px] max-w-[100px]')}
+                                          ${renderSortHeader('Section', 'sec', 'min-w-[60px] max-w-[100px]')}
+                                          ${renderSortHeader('申請人', 'owner', 'min-w-[70px] max-w-[120px]')}
+                                          ${renderSortHeader('需求摘要', 'desc', 'min-w-[300px] max-w-[450px]')}
+                                          ${renderSortHeader('處理人員', 'applicant', 'min-w-[80px] max-w-[120px]')}
+                                          <th class="px-3 py-3.5 border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[50px]">TCD</th>
+                                          <th class="px-3 py-3.5 border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[70px]">App Link</th>
+                                          ${renderSortHeader('MP', 'benefit', 'text-right min-w-[70px]')}
+                                          ${renderSortHeader('DBCat', 'dbCat', 'text-center min-w-[100px] max-w-[200px]')}
+                                          <th class="px-3 py-3.5 border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[70px]">Data Source</th>
+                                          ${stationHeaders}
+                                          <th class="px-2 py-3.5 sticky right-0 z-30 border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest sticky-right-shadow">Action</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody class="divide-y divide-slate-100 dark:divide-transparent">${rowsHtml}</tbody>
+                                    </table>
+                                  </div>
+                                `;
+            } else {
+                let cardsHtml = currentData.map(row => {
+                    let statusColor = getStatusColorClass(row.status);
+                    let statusIcon = getStatusIconTag(row.status);
+
+                    let dbCatTags = '';
+                    if (row.dbCat) {
+                        dbCatTags = String(row.dbCat).split(',').map(cat =>
+                            `<span class="inline-block px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20 text-[10px] font-bold mr-1 mb-1 shadow-sm">${cat.trim()}</span>`
+                        ).join('');
+                    }
+
+                    return `
+                                    <div class="flex flex-col p-4 rounded-xl border transition-all bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:shadow-lg dark:hover:border-sky-500/50 relative group">
+                                    <div class="flex justify-between items-start mb-3">
+                                        <div class="flex gap-2 items-center">
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold border dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${statusColor}">
+                                            ${statusIcon} ${row.status}
+                                        </span>
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold font-mono bg-slate-50 text-slate-600 border border-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 shadow-sm uppercase tracking-wide">
+                                            ITEMNO: ${row.itemNum}
+                                        </span>
+                                        </div>
+                                        <div class="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onclick="openModal('edit', ${row.regId})" class="p-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-500 hover:bg-blue-50 dark:text-sky-400 dark:hover:bg-slate-700 shadow-sm transition-colors">
+                                            <i data-lucide="pen-line" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <button onclick="deleteData(${row.regId})" class="p-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-rose-500 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-slate-700 shadow-sm transition-colors">
+                                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex justify-between items-start mb-2">
+                                        <div class="flex-1 pr-4">
+                                        <div class="text-[13px] font-bold text-teal-600 dark:text-teal-400 mb-1 tracking-wide">申請人: ${row.owner || '-'}</div>
+                                        <h3 class="font-bold text-[15px] text-slate-800 dark:text-slate-200 leading-snug line-clamp-2" title="${row.desc}">${row.desc}</h3>
+                                        <div class="mt-2">${dbCatTags}</div>
+                                        </div>
+                                        <div class="text-right shrink-0 flex flex-col items-end">
+                                        <div class="text-[14px] font-bold text-blue-600 dark:text-sky-400 font-mono">#${row.regId}</div>
+                                        <div class="text-[11px] font-medium text-slate-400 dark:text-slate-500 font-mono mt-0.5">${row.date}</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="w-full h-px bg-slate-100 dark:bg-slate-800 my-3"></div>
+
+                                    <div class="flex flex-col gap-2.5 mt-auto">
+                                        <div class="flex justify-between items-center text-[13px]">
+                                        <span class="text-slate-500 dark:text-slate-400 font-medium">負責人</span>
+                                        <span class="font-medium text-slate-700 dark:text-slate-300">${row.applicant || '未指派'}</span>
+                                        </div>
+                                        <div class="flex justify-between items-center text-[13px]">
+                                        <span class="text-slate-500 dark:text-slate-400 font-medium">完成日期</span>
+                                        <span class="font-medium font-mono text-slate-700 dark:text-slate-300">${row.completionDate || '-'}</span>
+                                        </div>
+                                        <div class="flex justify-between items-center text-[13px]">
+                                        <span class="text-slate-500 dark:text-slate-400 font-medium">部門/課別</span>
+                                        <span class="font-medium text-slate-700 dark:text-slate-300">${row.dept} / ${row.sec || '-'}</span>
+                                        </div>
+                                        <div class="flex justify-between items-center text-[13px]">
+                                        <span class="text-slate-500 dark:text-slate-400 font-medium">預期效益</span>
+                                        <span class="font-medium ${row.benefit > 0 ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}">${row.benefit > 0 ? row.benefit + ' MP/年' : '無'}</span>
+                                        </div>
+                                    </div>
+                                    </div>
+                                `}).join('');
+
+                if (currentData.length === 0) cardsHtml = `<div class="col-span-full py-16 text-center text-slate-500 font-bold tracking-widest opacity-60">找不到符合條件的資料。</div>`;
+                contentContainer.innerHTML = `<div class="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 dark:bg-slate-950/50">${cardsHtml}</div>`;
+            }
+            lucide.createIcons();
+        }
+
+        function renderPagination() {
+            const filtered = getProcessedData();
+            const totalItems = filtered.length;
+            const isAll = state.itemsPerPage === 'All';
+            const totalPages = isAll ? 1 : (Math.ceil(totalItems / state.itemsPerPage) || 1);
+            const startNum = totalItems > 0 ? (isAll ? 1 : (state.currentPage - 1) * state.itemsPerPage + 1) : 0;
+            const endNum = isAll ? totalItems : Math.min(state.currentPage * state.itemsPerPage, totalItems);
+            const prevDisabled = state.currentPage === 1 || isAll || totalItems === 0;
+            const nextDisabled = state.currentPage === totalPages || isAll || totalItems === 0;
+
+            document.getElementById('pagination-container').innerHTML = `
+                                    <div class="flex items-center justify-between px-6 py-4">
+                                    <div class="text-[12px] text-slate-500 dark:text-slate-400 font-medium dark:font-mono">
+                                        Showing <span class="font-bold text-slate-800 dark:text-white">${startNum}</span> to <span class="font-bold text-slate-800 dark:text-white">${endNum}</span> of <span class="font-bold text-slate-800 dark:text-white">${totalItems}</span> entries
+                                    </div>
+                                    <div class="flex items-center gap-5">
+                                        <div class="flex items-center gap-2">
+                                        <span class="text-[11px] font-bold text-slate-500 tracking-widest">Rows:</span>
+                                        <select onchange="changeItemsPerPage(this.value)" class="text-xs font-bold dark:font-mono px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-white cursor-pointer hover:border-slate-300 dark:hover:border-sky-500 shadow-sm transition-colors outline-none">
+                                            <option value="15" ${state.itemsPerPage === 15 ? 'selected' : ''}>15</option>
+                                            <option value="30" ${state.itemsPerPage === 30 ? 'selected' : ''}>30</option>
+                                            <option value="50" ${state.itemsPerPage === 50 ? 'selected' : ''}>50</option>
+                                            <option value="All" ${state.itemsPerPage === 'All' ? 'selected' : ''}>All</option>
+                                            </select>
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                        <button onclick="changePage(${Math.max(1, state.currentPage - 1)})" ${prevDisabled ? 'disabled' : ''} class="p-2 rounded-lg border transition-colors ${prevDisabled ? 'border-slate-100 text-slate-300 bg-slate-50 dark:border-slate-800 dark:text-slate-600 dark:bg-transparent cursor-not-allowed' : 'border-slate-200 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white'}">
+                                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                                        </button>
+                                        <span class="text-[12px] px-2 text-slate-700 dark:text-white font-bold tracking-widest dark:font-mono">${state.currentPage} / ${totalPages}</span>
+                                        <button onclick="changePage(${Math.min(totalPages, state.currentPage + 1)})" ${nextDisabled ? 'disabled' : ''} class="p-2 rounded-lg border transition-colors ${nextDisabled ? 'border-slate-100 text-slate-300 bg-slate-50 dark:border-slate-800 dark:text-slate-600 dark:bg-transparent cursor-not-allowed' : 'border-slate-200 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white'}">
+                                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                                        </button>
+                                        </div>
+                                    </div>
+                                    </div>
+                                `;
+            lucide.createIcons();
+        }
+
+        function setView(viewMode) {
+            state.view = viewMode;
+            const btnTable = document.getElementById('btn-view-table');
+            const btnCard = document.getElementById('btn-view-card');
+            if (viewMode === 'table') {
+                btnTable.className = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-white text-blue-600 border border-slate-200/50 dark:bg-slate-800 dark:text-sky-400 dark:border-slate-700 shadow-sm transition-colors";
+                btnCard.className = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors bg-transparent border border-transparent";
+            } else {
+                btnCard.className = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded bg-white text-blue-600 border border-slate-200/50 dark:bg-slate-800 dark:text-sky-400 dark:border-slate-700 shadow-sm transition-colors";
+                btnTable.className = "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors bg-transparent border border-transparent";
+            }
+            renderContent();
+        }
+
+        function setSort(key) {
+            state.sortConfig.direction = (state.sortConfig.key === key && state.sortConfig.direction === 'desc') ? 'asc' : 'desc';
+            state.sortConfig.key = key;
+            renderContent();
+        }
+
+        function handleSearch(val) { state.searchTerm = val; state.currentPage = 1; renderContent(); renderPagination(); }
+        function handleStatusFilter(val) { state.statusFilter = val; state.currentPage = 1; renderContent(); renderPagination(); }
+        function changePage(page) { state.currentPage = page; renderContent(); renderPagination(); }
+        function changeItemsPerPage(num) {
+            state.itemsPerPage = (num === 'All') ? 'All' : Number(num);
+            state.currentPage = 1;
+            renderContent();
+            renderPagination();
+        }
+
+        function openModal(mode, regId = null) {
+            const modal = document.getElementById('crud-modal');
+            const content = document.getElementById('crud-modal-content');
+            document.getElementById('modal-mode').value = mode;
+            document.getElementById('crud-form').reset();
+
+            const baseInputs = ['form-dept', 'form-sec', 'form-owner', 'form-desc'];
+            currentDbCats = [];
+            document.getElementById('form-dbcat-input').value = '';
+            document.getElementById('form-comp-date').value = '';
+
+            if (mode === 'add') {
+                document.getElementById('modal-title').innerHTML = '<i data-lucide="plus-circle" class="w-5 h-5 text-blue-600 dark:text-sky-400"></i> 新增任務';
+                document.getElementById('edit-advanced-section').classList.add('hidden');
+                baseInputs.forEach(id => document.getElementById(id).disabled = false);
+            } else {
+                document.getElementById('modal-title').innerHTML = `<i data-lucide="settings" class="w-5 h-5 text-blue-600 dark:text-sky-400"></i> 編輯任務 <span class="ml-2 text-sm font-mono text-slate-500">ID:${regId}</span>`;
+                document.getElementById('edit-advanced-section').classList.remove('hidden');
+                document.getElementById('modal-regid').value = regId;
+                baseInputs.forEach(id => document.getElementById(id).disabled = true);
+
+                const item = appData.find(d => d.regId === regId);
+                if (item) {
+                    document.getElementById('form-dept').value = item.dept;
+                    document.getElementById('form-sec').value = item.sec || '';
+                    document.getElementById('form-desc').value = item.desc;
+                    document.getElementById('form-status').value = item.status;
+                    document.getElementById('form-owner').value = item.owner || '';
+                    document.getElementById('form-applicant').value = item.applicant || '';
+                    document.getElementById('form-benefit').value = item.benefit || '';
+                    document.getElementById('form-tcd').value = item.tcd || '';
+                    document.getElementById('form-applink').value = item.appLink || '';
+                    document.getElementById('form-datasource').value = item.dataSource || '';
+                    document.getElementById('form-comp-date').value = item.completionDate || '';
+
+                    if (item.dbCat) {
+                        currentDbCats = String(item.dbCat).split(',').map(s => s.trim()).filter(s => s);
+                    }
+
+                    document.getElementById('form-stations-grid').innerHTML = stationColumns.map(col => {
+                        let val = item[col.toLowerCase()] || '', mp = '', url = '';
+                        if (val.includes('^')) { [mp, url] = val.split('^'); } else if (val.startsWith('http') || val.startsWith('Notes://')) { url = val; } else { mp = val; }
+
+                        return `
+                                                <div class="p-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50/50 dark:bg-slate-800/50 relative focus-within:border-blue-500 dark:focus-within:border-sky-500 transition-colors">
+                                                    <label class="absolute -top-2 left-2 px-1 text-[10px] font-bold bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-sky-400 tracking-widest">${col}</label>
+                                                    <div class="space-y-2 mt-2">
+                                                        <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded overflow-hidden focus-within:border-blue-500 dark:focus-within:border-sky-500 transition-colors shadow-sm dark:shadow-inner">
+                                                            <span class="pl-2 text-slate-400 dark:text-slate-500"><i data-lucide="activity" class="w-3.5 h-3.5"></i></span>
+                                                            <input type="text" id="st-mp-${col}" value="${mp}" placeholder="MP Saving" class="w-full text-xs font-mono px-2 py-1.5 bg-transparent text-slate-800 dark:text-slate-200 outline-none placeholder-slate-400 dark:placeholder-slate-600">
+                                                        </div>
+                                                        <div class="flex items-center bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded overflow-hidden focus-within:border-blue-500 dark:focus-within:border-sky-500 transition-colors shadow-sm dark:shadow-inner">
+                                                            <span class="pl-2 text-slate-400 dark:text-slate-500"><i data-lucide="link" class="w-3.5 h-3.5"></i></span>
+                                                            <input type="text" id="st-url-${col}" value="${url}" placeholder="URL" class="w-full text-xs font-mono px-2 py-1.5 bg-transparent text-slate-800 dark:text-slate-200 outline-none placeholder-slate-400 dark:placeholder-slate-600">
+                                                        </div>
+                                                    </div>
+                                                </div>`;
+                    }).join('');
+                }
+            }
+            renderDbCatTags();
+            modal.classList.remove('hidden'); lucide.createIcons();
+            setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10);
+        }
+
+        function viewSqlModal(regId) {
+            const item = appData.find(d => d.regId === regId);
+            if (!item || !item.dataSource) return;
+            document.getElementById('sql-viewer-code').textContent = item.dataSource;
+            const modal = document.getElementById('sql-modal');
+            const content = document.getElementById('sql-modal-content');
+            modal.classList.remove('hidden');
+            lucide.createIcons();
+            setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10);
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            const content = document.getElementById(modalId + '-content');
+            content.classList.remove('scale-100', 'opacity-100'); content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => modal.classList.add('hidden'), 200);
+        }
+
+        // ==========================================
+        // ⭐ 報表 1 與共用統計邏輯
+        // ==========================================
+        let isChartRendered = false;
+        let chartInstance = null;
+
+        function openStatsView() {
+            document.getElementById('mainView').classList.add('hidden-view');
+            document.getElementById('statsView').classList.remove('hidden-view');
+
+            if (appData && appData.length > 0) {
+                initStatsDateRange();
+
+                // ⭐ 顯示統一的時間區間過濾器，並渲染兩份報表
+                document.getElementById('stats-date-filter-container').classList.remove('hidden-view');
+                document.getElementById('report-monthly').classList.remove('hidden-view');
+                document.getElementById('report-dept').classList.remove('hidden-view');
+
+                updateStats();
+                isChartRendered = true;
+            } else {
+                showToast("目前沒有資料可以統計", "info");
+            }
+        }
+
+        function closeStatsView() {
+            document.getElementById('statsView').classList.add('hidden-view');
+            document.getElementById('mainView').classList.remove('hidden-view');
+        }
+
+        function generateMonthList(startStr, endStr) {
+            const result = [];
+            let [sY, sM] = startStr.split('-').map(Number);
+            let [eY, eM] = endStr.split('-').map(Number);
+
+            let currY = sY;
+            let currM = sM;
+
+            while (currY < eY || (currY === eY && currM <= eM)) {
+                result.push(`${currY}-${String(currM).padStart(2, '0')}`);
+                currM++;
+                if (currM > 12) {
+                    currM = 1;
+                    currY++;
+                }
+            }
+            return result;
+        }
+
+        function initStatsDateRange(forceReset = false) {
+            const startSelect = document.getElementById('stats-start-month');
+            const endSelect = document.getElementById('stats-end-month');
+
+            if (forceReset || startSelect.options.length === 0) {
+                let minDate = '9999-99';
+                let maxDate = '0000-00';
+
+                appData.forEach(item => {
+                    const dDate = item.date || item.regDate || item.Date || item['註冊日期'];
+                    if (!dDate) return;
+                    try {
+                        const d = new Date(dDate);
+                        if (isNaN(d.getTime())) return;
+                        const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        if (mStr < minDate) minDate = mStr;
+                        if (mStr > maxDate) maxDate = mStr;
+                    } catch (e) { }
+                });
+
+                if (minDate === '9999-99') {
+                    const now = new Date();
+                    minDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                }
+                if (maxDate === '0000-00') maxDate = minDate;
+
+                const allMonths = generateMonthList(minDate, maxDate);
+
+                let optionsHtml = '';
+                allMonths.forEach(m => {
+                    optionsHtml += `<option value="${m}">${m}</option>`;
+                });
+
+                startSelect.innerHTML = optionsHtml;
+                endSelect.innerHTML = optionsHtml;
+
+                startSelect.value = minDate;
+                endSelect.value = maxDate;
+            }
+        }
+
+        function updateStats() {
+            const startSelect = document.getElementById('stats-start-month');
+            const endSelect = document.getElementById('stats-end-month');
+
+            if (startSelect.value > endSelect.value) {
+                const temp = startSelect.value;
+                startSelect.value = endSelect.value;
+                endSelect.value = temp;
+            }
+
+            const startMonth = startSelect.value;
+            const endMonth = endSelect.value;
+
+            // 報表 1 的資料處理
+            const statsResult = processStatistics(appData, startMonth, endMonth);
+            renderSummaryCards(statsResult.totals);
+            renderStatsTable(statsResult.monthlyData);
+            renderChart(statsResult.monthlyData);
+
+            // ⭐ 報表 2 的資料處理：過濾時間區間後傳入第二張報表進行繪製
+            const filteredDataForDept = appData.filter(item => {
+                const dDate = item.date || item.regDate || item.Date || item['註冊日期'];
+                if (!dDate) return false;
+                let mStr;
+                try {
+                    const dateParts = String(dDate).trim().split(/[-/]/);
+                    if (dateParts.length >= 2 && dateParts[0].length === 4) {
+                        mStr = `${dateParts[0]}-${dateParts[1].padStart(2, '0')}`;
+                    } else {
+                        const d = new Date(dDate);
+                        mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    }
+                } catch (e) { return false; }
+                return mStr >= startMonth && mStr <= endMonth;
+            });
+
+            processAndRenderDeptReport(filteredDataForDept);
+        }
+
+        function processStatistics(data, startMonthStr, endMonthStr) {
+            const totals = { totalCases: 0, plugs: 0, plugsOnline: 0, plugsWip: 0 };
+            const globalMonthlyStats = {};
+
+            data.forEach(item => {
+                let dateVal = '';
+                let statusVal = '';
+                let dbCatVal = '';
+
+                for (const key in item) {
+                    if (item[key] === null || item[key] === undefined) continue;
+                    const lowerKey = key.toLowerCase();
+
+                    if (['date', 'regdate', '註冊日期'].includes(lowerKey)) dateVal = String(item[key]);
+                    if (['status', '狀態'].includes(lowerKey)) statusVal = String(item[key]);
+                    if (['dbcat'].includes(lowerKey)) dbCatVal = String(item[key]);
+                }
+
+                dateVal = dateVal.trim();
+                statusVal = statusVal.trim();
+                dbCatVal = dbCatVal.trim();
+
+                const dbCatArr = dbCatVal.split(',')
+                    .map(s => s.trim().toUpperCase())
+                    .filter(s => s !== '' && s !== '-' && s !== 'NULL' && s !== 'UNDEFINED' && s !== 'N/A');
+                const plugCount = dbCatArr.length > 0 ? dbCatArr.length : 1;
+
+                const isOnline = statusVal.includes('已上線') || statusVal.includes('完成') || statusVal.toUpperCase().includes('CLOSE');
+                const isWip = statusVal.includes('處理中') || statusVal.includes('確認中') || (!isOnline && statusVal !== '');
+
+                if (!dateVal) return;
+
+                let monthKey;
+                try {
+                    const dateParts = dateVal.split(/[-/]/);
+                    if (dateParts.length >= 2 && dateParts[0].length === 4) {
+                        monthKey = `${dateParts[0]}-${dateParts[1].padStart(2, '0')}`;
+                    } else {
+                        const d = new Date(dateVal);
+                        if (isNaN(d.getTime())) return;
+                        monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    }
+                } catch (e) { return; }
+
+                if (!globalMonthlyStats[monthKey]) {
+                    globalMonthlyStats[monthKey] = { month: monthKey, totalCases: 0, plugs: 0, plugsOnline: 0, plugsWip: 0 };
+                }
+
+                globalMonthlyStats[monthKey].totalCases += 1;
+                globalMonthlyStats[monthKey].plugs += plugCount;
+
+                if (isOnline) {
+                    globalMonthlyStats[monthKey].plugsOnline += 1;
+                } else if (isWip) {
+                    globalMonthlyStats[monthKey].plugsWip += 1;
+                }
+            });
+
+            if (startMonthStr && endMonthStr && typeof generateMonthList === 'function') {
+                generateMonthList(startMonthStr, endMonthStr).forEach(m => {
+                    if (!globalMonthlyStats[m]) {
+                        globalMonthlyStats[m] = { month: m, totalCases: 0, plugs: 0, plugsOnline: 0, plugsWip: 0 };
+                    }
+                });
+            }
+
+            const sortedMonths = Object.keys(globalMonthlyStats).sort();
+            let currentAcc = 0;
+            const finalData = [];
+
+            sortedMonths.forEach(month => {
+                const stat = globalMonthlyStats[month];
+
+                const withinStart = !startMonthStr || month >= startMonthStr;
+                const withinEnd = !endMonthStr || month <= endMonthStr;
+
+                // ⭐ 修正區間累加 Bug：只有在選定的區間內才開始累加 currentAcc
+                if (withinStart && withinEnd) {
+                    currentAcc += stat.plugs;
+                    stat.plugsAcc = currentAcc;
+
+                    finalData.push(stat);
+
+                    totals.totalCases += stat.totalCases;
+                    totals.plugs += stat.plugs;
+                    totals.plugsOnline += stat.plugsOnline;
+                    totals.plugsWip += stat.plugsWip;
+                }
+            });
+
+            return { monthlyData: finalData, totals: totals };
+        }
+
+        function renderSummaryCards(totals) {
+            animateValue("summary-total-cases", parseInt(document.getElementById("summary-total-cases").innerText) || 0, totals.totalCases, 600);
+            animateValue("summary-total-plugs", parseInt(document.getElementById("summary-total-plugs").innerText) || 0, totals.plugs, 600);
+            animateValue("summary-plugs-online", parseInt(document.getElementById("summary-plugs-online").innerText) || 0, totals.plugsOnline, 600);
+            animateValue("summary-plugs-wip", parseInt(document.getElementById("summary-plugs-wip").innerText) || 0, totals.plugsWip, 600);
+        }
+
+        function animateValue(id, start, end, duration) {
+            if (start === end) { document.getElementById(id).innerHTML = end; return; }
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                document.getElementById(id).innerHTML = Math.floor(progress * (end - start) + start);
+                if (progress < 1) window.requestAnimationFrame(step);
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        function renderStatsTable(statsData) {
+            const headerRow = document.getElementById('tableHeader');
+            const body = document.getElementById('tableBody');
+            const isDark = document.documentElement.classList.contains('dark');
+
+            const stickyBg = isDark ? 'bg-slate-800' : 'bg-slate-100';
+            const stickyRowBgDark = isDark ? 'bg-slate-900' : 'bg-white';
+            const stickyRowBgLight = isDark ? 'bg-slate-800/50' : 'bg-slate-50';
+
+            let headerHTML = `<th class="sticky-col py-3 px-4 text-left border border-slate-200 dark:border-slate-700 ${stickyBg}">Item Status</th>`;
+            statsData.forEach(stat => { headerHTML += `<th class="py-3 px-4 border border-slate-200 dark:border-slate-700">${stat.month}</th>`; });
+            headerHTML += `<th class="py-3 px-4 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-extrabold border-l-2 border-l-slate-300 dark:border-l-slate-600">Total</th>`;
+            headerRow.innerHTML = headerHTML;
+
+            const rowsConfig = [
+                { key: 'plugsAcc', label: '插頭申請數(Acc)', textClass: 'text-purple-600 dark:text-purple-400' },
+                { key: 'plugs', label: '插頭申請數', textClass: 'text-blue-600 dark:text-blue-400' },
+                { key: 'plugsOnline', label: '插頭已上線', textClass: 'text-emerald-600 dark:text-emerald-400' },
+                { key: 'plugsWip', label: '插頭進行中', textClass: 'text-amber-600 dark:text-amber-400' },
+                { key: 'totalCases', label: '案件申請數', textClass: 'text-slate-600 dark:text-slate-400' }
+            ];
+
+            let bodyHTML = '';
+            rowsConfig.forEach((rowConfig, index) => {
+                const bgClass = index % 2 === 0 ? stickyRowBgDark : stickyRowBgLight;
+                let tr = `<tr class="transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-700/50">`;
+
+                tr += `<td class="sticky-col py-3 px-4 font-bold text-left border border-slate-200 dark:border-slate-700 ${bgClass} ${rowConfig.textClass}">${rowConfig.label}</td>`;
+
+                let rowTotal = 0;
+
+                statsData.forEach((stat, statIndex) => {
+                    rowTotal += stat[rowConfig.key] || 0;
+
+                    // ⭐ 已移除強制覆蓋 Acc 數值的錯誤邏輯，確保呈現真正的累加值
+                    let displayValue = stat[rowConfig.key];
+                    tr += `<td class="py-3 px-4 border border-slate-200 dark:border-slate-700 font-bold ${bgClass} ${rowConfig.textClass}">${displayValue}</td>`;
+                });
+
+                const displayTotal = rowConfig.key === 'plugsAcc' ? '-' : rowTotal;
+                tr += `<td class="py-3 px-4 border border-slate-200 dark:border-slate-700 font-black ${bgClass} ${rowConfig.textClass} border-l-2 border-l-slate-300 dark:border-l-slate-600">${displayTotal}</td>`;
+
+                tr += `</tr>`;
+                bodyHTML += tr;
+            });
+            body.innerHTML = bodyHTML;
+        }
+
+        function renderChart(statsData) {
+            const ctx = document.getElementById('comboChart').getContext('2d');
+            const labels = statsData.map(d => d.month);
+            const dataOnline = statsData.map(d => d.plugsOnline);
+            const dataWip = statsData.map(d => d.plugsWip);
+            const dataAcc = statsData.map(d => d.plugsAcc);
+
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+
+            if (chartInstance) { chartInstance.destroy(); }
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: '插頭申請數 (Acc)',
+                            data: dataAcc,
+                            borderColor: '#8b5cf6',
+                            backgroundColor: '#8b5cf6',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0,
+                            pointBackgroundColor: isDark ? '#0f172a' : '#ffffff',
+                            pointBorderColor: '#8b5cf6',
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            yAxisID: 'y-acc',
+                            order: 1,
+                            datalabels: {
+                                align: 'top',
+                                anchor: 'end',
+                                offset: 6,
+                                color: isDark ? '#c084fc' : '#7c3aed',
+                                font: { family: "'Inter', sans-serif", weight: '900', size: 13 },
+                                padding: 2
+                            }
+                        },
+                        {
+                            type: 'bar',
+                            label: '插頭進行中',
+                            data: dataWip,
+                            backgroundColor: '#fbbf24',
+                            barPercentage: 0.5,
+                            yAxisID: 'y-bar',
+                            order: 3,
+                            datalabels: {
+                                align: 'center',
+                                anchor: 'center',
+                                color: '#78350f',
+                                font: { family: "'Inter', sans-serif", weight: 'bold', size: 11 }
+                            }
+                        },
+                        {
+                            type: 'bar',
+                            label: '插頭已上線',
+                            data: dataOnline,
+                            backgroundColor: '#10b981',
+                            barPercentage: 0.5,
+                            yAxisID: 'y-bar',
+                            order: 2,
+                            datalabels: {
+                                align: 'center',
+                                anchor: 'center',
+                                color: '#ffffff',
+                                font: { family: "'Inter', sans-serif", weight: 'bold', size: 11 }
+                            }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 35 } },
+                    plugins: {
+                        datalabels: { display: function (context) { return context.dataset.data[context.dataIndex] > 0; } },
+                        tooltip: { mode: 'index', intersect: false, backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)', titleColor: isDark ? '#f8fafc' : '#0f172a', bodyColor: isDark ? '#cbd5e1' : '#334155', borderColor: isDark ? '#334155' : '#e2e8f0', borderWidth: 1, padding: 12 },
+                        legend: { position: 'top', labels: { color: textColor, usePointStyle: true, boxWidth: 8, padding: 15, font: { family: "'Inter', sans-serif", weight: '600' } } }
+                    },
+                    scales: {
+                        x: { stacked: true, grid: { display: false }, ticks: { color: textColor, font: { family: "'Inter', sans-serif" } } },
+                        'y-bar': {
+                            type: 'linear', display: true, position: 'left', stacked: true,
+                            title: { display: true, text: '當月數量', color: textColor, font: { family: "'Inter', sans-serif", weight: '600' } },
+                            suggestedMin: 0, suggestedMax: Math.max(...dataOnline.map((num, idx) => num + dataWip[idx])) + 3,
+                            ticks: { stepSize: 1, color: textColor },
+                            grid: { color: gridColor }
+                        },
+                        'y-acc': {
+                            type: 'linear', display: true, position: 'right', stacked: false,
+                            title: { display: true, text: '累計數量', color: textColor, font: { family: "'Inter', sans-serif", weight: '600' } },
+                            suggestedMin: 0, suggestedMax: Math.max(...dataAcc) + 5,
+                            ticks: { color: textColor },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // ⭐ 報表 2: 插座與 Module 統計
+        // ==========================================
+        let deptChartInstance = null;
+
+        function processAndRenderDeptReport(data) {
+            let socketModuleMap = {};
+            let modulesSet = new Set();
+
+            data.forEach(item => {
+                let statusVal = String(item.status || item['狀態'] || '').trim();
+
+                // ⭐ 需求 2: 僅統計 status 為 '已上線' 的資料
+                if (statusVal !== '已上線') return;
+
+                let deptVal = '';
+                let dbCatVal = '';
+
+                for (const key in item) {
+                    if (item[key] === null || item[key] === undefined) continue;
+                    const lowerKey = key.toLowerCase();
+                    if (['dept', 'department', '部門'].includes(lowerKey)) deptVal = String(item[key]);
+                    if (['dbcat'].includes(lowerKey)) dbCatVal = String(item[key]);
+                }
+
+                deptVal = deptVal.trim() || '未指定';
+                dbCatVal = dbCatVal.trim();
+
+                const dbCatArr = dbCatVal.split(',')
+                    .map(s => s.trim().toUpperCase())
+                    .filter(s => s !== '' && s !== '-' && s !== 'NULL' && s !== 'UNDEFINED' && s !== 'N/A');
+
+                if (dbCatArr.length > 0) {
+                    dbCatArr.forEach(cat => {
+                        if (!socketModuleMap[cat]) socketModuleMap[cat] = { total: 0 };
+                        if (!socketModuleMap[cat][deptVal]) socketModuleMap[cat][deptVal] = 0;
+                        socketModuleMap[cat][deptVal]++;
+                        socketModuleMap[cat].total++;
+                        modulesSet.add(deptVal);
+                    });
+                }
+            });
+
+            const sortedSockets = Object.keys(socketModuleMap).sort((a, b) => socketModuleMap[b].total - socketModuleMap[a].total);
+            const sortedModules = Array.from(modulesSet).sort();
+
+            // --- 渲染資料彙總卡片 (移至最上方，與報表1風格統一) ---
+            const cardColors = [
+                { bg: 'bg-blue-50 dark:bg-sky-500/10', text: 'text-blue-600 dark:text-sky-400', border: 'border-blue-100 dark:border-sky-500/20' },
+                { bg: 'bg-purple-50 dark:bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-100 dark:border-purple-500/20' },
+                { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-100 dark:border-emerald-500/20' },
+                { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-100 dark:border-amber-500/20' }
+            ];
+
+            let summaryHTML = '';
+            sortedSockets.forEach((soc, idx) => {
+                const color = cardColors[idx % cardColors.length];
+                summaryHTML += `
+                            <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 flex items-center gap-4 transition-colors min-w-[200px] flex-1">
+                                <div class="p-3.5 ${color.bg} ${color.text} rounded-xl border ${color.border}">
+                                    <i data-lucide="plug" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <p class="text-[12px] text-slate-500 dark:text-slate-400 font-bold tracking-wide">${soc}</p>
+                                    <p class="text-[28px] font-black text-slate-800 dark:text-white leading-none mt-1">${socketModuleMap[soc].total}</p>
+                                </div>
+                            </div>
+                        `;
+            });
+            if (sortedSockets.length === 0) summaryHTML = '<div class="col-span-full py-4 text-slate-400 text-sm w-full text-center">無資料</div>';
+            const summaryContainer = document.getElementById('dept-summary-cards');
+            if (summaryContainer) summaryContainer.innerHTML = summaryHTML;
+
+            // --- 渲染表格 ---
+            const headerRow = document.getElementById('deptTableHeader');
+            const body = document.getElementById('deptTableBody');
+            if (!headerRow || !body) return;
+
+            const isDark = document.documentElement.classList.contains('dark');
+            const stickyBg = isDark ? 'bg-slate-800' : 'bg-slate-100';
+            const stickyRowBgDark = isDark ? 'bg-slate-900' : 'bg-white';
+            const stickyRowBgLight = isDark ? 'bg-slate-800/50' : 'bg-slate-50';
+
+            // ⭐ 調整為「插座」與「使用MODULE」兩欄模式
+            let headerHTML = `<th class="sticky-col py-3 px-4 text-left border border-slate-200 dark:border-slate-700 ${stickyBg} w-[150px]">插座</th>`;
+            headerHTML += `<th class="py-3 px-4 text-left border border-slate-200 dark:border-slate-700">MODULE使用插頭數量</th>`;
+            headerRow.innerHTML = headerHTML;
+
+            let bodyHTML = '';
+            sortedSockets.forEach((socket, index) => {
+                const bgClass = index % 2 === 0 ? stickyRowBgDark : stickyRowBgLight;
+                let tr = `<tr class="transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-700/50">`;
+
+                tr += `<td class="sticky-col py-3 px-4 font-bold text-left border border-slate-200 dark:border-slate-700 ${bgClass} text-slate-700 dark:text-slate-200">${socket}</td>`;
+
+                // ⭐ 組合使用MODULE內容，如：DF3(1) 、 DF4(1)
+                let modulesDetails = [];
+                sortedModules.forEach(mod => {
+                    const count = socketModuleMap[socket][mod] || 0;
+                    if (count > 0) {
+                        modulesDetails.push(`${mod}(${count})`);
+                    }
+                });
+                const detailsStr = modulesDetails.join(' 、 ');
+
+                tr += `<td class="py-3 px-4 border border-slate-200 dark:border-slate-700 text-left ${bgClass} text-slate-600 dark:text-slate-300 font-medium">${detailsStr}</td>`;
+                tr += `</tr>`;
+                bodyHTML += tr;
+            });
+            if (sortedSockets.length === 0) bodyHTML = `<tr><td colspan="2" class="py-12 text-center text-slate-400">目前區間內無已上線的插座統計資料。</td></tr>`;
+            body.innerHTML = bodyHTML;
+
+            // --- 渲染趨勢圖 ---
+            const ctxEl = document.getElementById('deptChart');
+            if (!ctxEl) return;
+            const ctx = ctxEl.getContext('2d');
+            if (deptChartInstance) deptChartInstance.destroy();
+
+            const colors = ['#60a5fa', '#f472b6', '#c084fc', '#cbd5e1', '#fbbf24', '#4ade80', '#38bdf8', '#fb923c', '#a78bfa'];
+
+            const datasets = sortedModules.map((mod, i) => {
+                return {
+                    label: mod,
+                    data: sortedSockets.map(soc => socketModuleMap[soc][mod] || 0),
+                    backgroundColor: colors[i % colors.length],
+                    order: 2,
+                    datalabels: { display: false }
+                };
+            });
+
+            datasets.push({
+                label: '總數量趨勢',
+                data: sortedSockets.map(soc => socketModuleMap[soc].total),
+                borderColor: '#64748b',
+                backgroundColor: '#64748b',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                pointBackgroundColor: '#ef4444',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 2,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                type: 'line',
+                order: 1,
+                datalabels: {
+                    align: 'top', anchor: 'end', offset: 8,
+                    color: '#ef4444',
+                    font: { family: "'Inter', sans-serif", weight: '900', size: 16 },
+                    display: true
+                }
+            });
+
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+
+            // ⭐ 修正：移除 X 軸標籤的 (總計:X) 提示文字，僅保留插座名稱
+            const chartLabels = sortedSockets.map(soc => soc);
+
+            deptChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: chartLabels, datasets: datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    layout: { padding: { top: 40, right: 20 } },
+                    scales: {
+                        x: { stacked: true, grid: { display: false }, ticks: { color: textColor, font: { family: "'Inter', sans-serif", weight: '500' } } },
+                        y: {
+                            stacked: true, grid: { color: gridColor }, ticks: { stepSize: 1, color: textColor },
+                            title: { display: true, text: '插頭數量', color: textColor, font: { family: "'Inter', sans-serif", weight: 'bold' } },
+                            suggestedMax: sortedSockets.length > 0 ? socketModuleMap[sortedSockets[0]].total + 2 : 5
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            align: 'center',
+                            labels: { color: textColor, usePointStyle: false, boxWidth: 20, padding: 10, font: { family: "'Inter', sans-serif", weight: '500' }, filter: function (item) { return true; } },
+                            title: { display: true, text: 'Module 種類', color: textColor, font: { weight: 'bold', family: "'Inter', sans-serif" } }
+                        },
+                        tooltip: {
+                            mode: 'index', intersect: false,
+                            backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                            titleColor: isDark ? '#f8fafc' : '#0f172a',
+                            bodyColor: isDark ? '#cbd5e1' : '#334155',
+                            borderColor: isDark ? '#334155' : '#e2e8f0',
+                            borderWidth: 1, padding: 12,
+                            filter: function (tooltipItem) {
+                                return tooltipItem.dataset.label !== '總數量趨勢' && tooltipItem.raw > 0;
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 重新初始化 Icons (為了新增的 Calculator Icon)
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        // 程式載入起點
+        document.addEventListener("DOMContentLoaded", () => {
+            lucide.createIcons();
+            fetchTasks();
+
+            // ⭐ 綁定 DBCat Enter 鍵新增
+            document.getElementById('form-dbcat-input').addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addDbCat(this.value);
+                    this.value = '';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

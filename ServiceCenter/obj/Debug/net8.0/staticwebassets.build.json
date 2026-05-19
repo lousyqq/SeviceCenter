@@ -1,0 +1,39 @@
+{
+  "Version": 1,
+  "Hash": "G7lD+xbMUY4hl88J11wiIrQfR2OKL7R3PxdkRpA4nv4=",
+  "Source": "ServiceCenter",
+  "BasePath": "_content/ServiceCenter",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [
+    {
+      "Name": "ServiceCenter\\wwwroot",
+      "Source": "ServiceCenter",
+      "ContentRoot": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\wwwroot\\",
+      "BasePath": "_content/ServiceCenter",
+      "Pattern": "**"
+    }
+  ],
+  "Assets": [
+    {
+      "Identity": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\wwwroot\\index.html",
+      "SourceId": "ServiceCenter",
+      "SourceType": "Discovered",
+      "ContentRoot": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\wwwroot\\",
+      "BasePath": "_content/ServiceCenter",
+      "RelativePath": "index.html",
+      "AssetKind": "All",
+      "AssetMode": "All",
+      "AssetRole": "Primary",
+      "AssetMergeBehavior": "PreferTarget",
+      "AssetMergeSource": "",
+      "RelatedAsset": "",
+      "AssetTraitName": "",
+      "AssetTraitValue": "",
+      "CopyToOutputDirectory": "Never",
+      "CopyToPublishDirectory": "PreserveNewest",
+      "OriginalItemSpec": "wwwroot\\index.html"
+    }
+  ]
+}
