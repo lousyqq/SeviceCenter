@@ -3,12 +3,16 @@
   "WorkspaceRootPath": "C:\\ServiceCenter\\ServiceCenter\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{3B99B2F7-29D5-449E-856D-9E1870C68C5F}|ServiceCenter\\ServiceCenter.csproj|c:\\servicecenter\\servicecenter\\servicecenter\\wwwroot\\index.html||{40D31677-CBC0-4297-A9EF-89D907823A98}",
-      "RelativeMoniker": "D:0:0:{3B99B2F7-29D5-449E-856D-9E1870C68C5F}|ServiceCenter\\ServiceCenter.csproj|solutionrelative:servicecenter\\wwwroot\\index.html||{40D31677-CBC0-4297-A9EF-89D907823A98}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{3B99B2F7-29D5-449E-856D-9E1870C68C5F}|ServiceCenter\\ServiceCenter.csproj|c:\\servicecenter\\servicecenter\\servicecenter\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{3B99B2F7-29D5-449E-856D-9E1870C68C5F}|ServiceCenter\\ServiceCenter.csproj|solutionrelative:servicecenter\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B99B2F7-29D5-449E-856D-9E1870C68C5F}|ServiceCenter\\ServiceCenter.csproj|c:\\servicecenter\\servicecenter\\servicecenter\\servicecenter.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{3B99B2F7-29D5-449E-856D-9E1870C68C5F}|ServiceCenter\\ServiceCenter.csproj|solutionrelative:servicecenter\\servicecenter.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B99B2F7-29D5-449E-856D-9E1870C68C5F}|ServiceCenter\\ServiceCenter.csproj|c:\\servicecenter\\servicecenter\\servicecenter\\wwwroot\\index.html||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{3B99B2F7-29D5-449E-856D-9E1870C68C5F}|ServiceCenter\\ServiceCenter.csproj|solutionrelative:servicecenter\\wwwroot\\index.html||{40D31677-CBC0-4297-A9EF-89D907823A98}"
     }
   ],
   "DocumentGroupContainers": [
@@ -18,7 +22,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 1,
+          "SelectedChildIndex": 3,
           "Children": [
             {
               "$type": "Bookmark",
@@ -26,26 +30,39 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
+              "Title": "ServiceCenter",
+              "DocumentMoniker": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\ServiceCenter.csproj",
+              "RelativeDocumentMoniker": "ServiceCenter\\ServiceCenter.csproj",
+              "ToolTip": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\ServiceCenter.csproj",
+              "RelativeToolTip": "ServiceCenter\\ServiceCenter.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2026-05-30T11:30:53.483Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
               "Title": "index.html",
               "DocumentMoniker": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\wwwroot\\index.html",
               "RelativeDocumentMoniker": "ServiceCenter\\wwwroot\\index.html",
               "ToolTip": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\wwwroot\\index.html",
               "RelativeToolTip": "ServiceCenter\\wwwroot\\index.html",
-              "ViewState": "AgIAAFcHAAAAAAAAAAD4v2UHAAAtAAAAAAAAAA==",
+              "ViewState": "AgIAAP8HAAAAAAAAAAAAABsIAAAHAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001512|",
               "WhenOpened": "2026-04-29T14:51:48.326Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\Program.cs",
               "RelativeDocumentMoniker": "ServiceCenter\\Program.cs",
               "ToolTip": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\Program.cs",
               "RelativeToolTip": "ServiceCenter\\Program.cs",
-              "ViewState": "AgIAAMYAAAAAAAAAAAAAAAUAAAASAAAAAAAAAA==",
+              "ViewState": "AgIAAHUAAAAAAAAAAAAgwH0AAAA/AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-04-29T14:50:50.766Z",
               "EditorCaption": ""

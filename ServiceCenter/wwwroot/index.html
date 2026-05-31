@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>代辦中心 (雙主題完整功能版)</title>
+    <title>代辦中心</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -370,7 +370,7 @@
                     <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col transition-colors">
                         <div class="flex items-center gap-2 mb-4">
                             <i data-lucide="bar-chart-horizontal" class="w-5 h-5 text-slate-400 dark:text-slate-500"></i>
-                            <h3 class="text-base font-bold text-slate-800 dark:text-white">狀態分佈與累積趨勢圖 <span class="text-xs font-medium text-slate-400 dark:text-slate-500 ml-2 tracking-wide">(柱狀圖堆疊顯示)</span></h3>
+                            <h3 class="text-base font-bold text-slate-800 dark:text-white">狀態分佈與累積趨勢圖 <span class="text-xs font-medium text-slate-400 dark:text-slate-500 ml-2 tracking-wide"></span></h3>
                         </div>
                         <div class="relative h-[350px] w-full mt-2">
                             <canvas id="comboChart"></canvas>
@@ -419,7 +419,7 @@
                 <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col transition-colors">
                     <div class="flex items-center gap-2 mb-4">
                         <i data-lucide="bar-chart-horizontal" class="w-5 h-5 text-slate-400 dark:text-slate-500"></i>
-                        <h3 class="text-base font-bold text-slate-800 dark:text-white">各插座 MODULE 使用插頭數量統計 <span class="text-xs font-medium text-slate-400 dark:text-slate-500 ml-2 tracking-wide">(由左至右依總數量遞減排序，顏色區塊代表不同 Module)</span></h3>
+                        <h3 class="text-base font-bold text-slate-800 dark:text-white">各插座 MODULE 使用插頭數量統計 <span class="text-xs font-medium text-slate-400 dark:text-slate-500 ml-2 tracking-wide"></span></h3>
                     </div>
 
                     <div class="relative h-[400px] w-full mt-2">
@@ -464,6 +464,13 @@
                             </div>
                         </div>
                         <div class="relative"><label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">需求摘要 <span class="text-rose-500">*</span></label><textarea id="form-desc" required rows="2" class="w-full px-3 py-2 border rounded-md outline-none bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:bg-white focus:border-blue-400 dark:focus:border-sky-500 transition-all text-slate-900 dark:text-slate-200 dark:placeholder-slate-600 disabled:opacity-50 resize-none"></textarea></div>
+
+                        <!-- 上傳檔案 (非必填) -->
+                        <div class="relative mt-4">
+                            <label class="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">上傳檔案 <span class="text-slate-400 dark:text-slate-500 font-normal">(非必填，支援 Excel / PPT / 圖檔)</span></label>
+                            <input type="file" id="form-attachment-input" class="hidden" accept=".xlsx,.xls,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.bmp,.webp" onchange="handleAttachmentSelect(event)">
+                            <div id="attachment-display"></div>
+                        </div>
                     </div>
 
                     <div id="edit-advanced-section" class="hidden space-y-6">
@@ -551,6 +558,9 @@
         let appData = [];
         let isPreviewMode = false;
         const stationColumns = ['DF1', 'DF2', 'DF3', 'DF4', 'ET1', 'ET2', 'ET3', 'ET4', 'LT3', 'LT4', 'TF1', 'TF2', 'TF3', 'TF4', 'TF5', 'TF6', 'PTI'];
+        // 是否在任務清單表格顯示 DF1~PTI 插座欄位（暫時隱藏，設 true 即可恢復顯示）
+        const SHOW_STATION_COLUMNS = false;
+        const tableStationColumns = SHOW_STATION_COLUMNS ? stationColumns : [];
 
         // ⭐ 新增 columnFilters 到全域狀態中
         const state = { view: 'table', searchTerm: '', statusFilter: 'All', sortConfig: { key: 'regId', direction: 'desc' }, currentPage: 1, itemsPerPage: 30, columnFilters: {} };
@@ -589,6 +599,85 @@
             renderDbCatTags();
         }
 
+        // ==========================================
+        // ⭐ 附件上傳邏輯
+        // modalAttachment 規則：
+        //   current  → 此任務目前 DB 中的附件路徑 (編輯時帶入)
+        //   file     → 使用者本次選擇、尚未上傳的新檔 (儲存時才送出)
+        //   removed  → 使用者按了刪除，儲存時要清除舊檔
+        // 由於每個檔案在後端都有唯一 GUID 檔名，且任務的 Attachment 欄位
+        // 與檔案 1:1 對應，新增/編輯/刪除都精準鎖定同一個檔，不會誤刪他人檔案。
+        // ==========================================
+        let modalAttachment = { current: '', file: null, removed: false };
+        const ATTACHMENT_ALLOWED = ['xlsx', 'xls', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'];
+
+        function getAttachmentMeta(pathOrName) {
+            const ext = String(pathOrName || '').split('.').pop().toLowerCase();
+            if (['xlsx', 'xls', 'csv'].includes(ext)) return { icon: 'file-spreadsheet', color: 'text-emerald-500 dark:text-emerald-400', label: 'Excel' };
+            if (['ppt', 'pptx'].includes(ext)) return { icon: 'presentation', color: 'text-orange-500 dark:text-orange-400', label: 'PPT' };
+            if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext)) return { icon: 'file-image', color: 'text-blue-500 dark:text-sky-400', label: '圖檔' };
+            return { icon: 'paperclip', color: 'text-slate-500 dark:text-slate-400', label: '檔案' };
+        }
+
+        // 取出「人類可讀」的附件檔名：去掉路徑、以及前綴的 {RegId}_ 與 {GUID}_ 編碼，
+        // 只留下使用者當初上傳的原始檔名 (例如 42_3822...c6_TEST.xlsx → TEST.xlsx)。
+        // 實體檔案仍保留完整前綴 (RegId 對應資料列、GUID 防同名誤刪)。
+        function getAttachmentDisplayName(pathOrName) {
+            let name = String(pathOrName || '').split('/').pop();
+            // 可選的 {數字}_ (RegId) 前綴 + 32 碼十六進位 (GUID) 前綴
+            return name.replace(/^(?:\d+_)?[0-9a-fA-F]{32}_/, '');
+        }
+
+        function triggerAttachmentInput() { document.getElementById('form-attachment-input').click(); }
+
+        function handleAttachmentSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!ATTACHMENT_ALLOWED.includes(ext)) {
+                showToast('不支援的檔案格式，僅限 Excel / PPT / 圖檔', 'error');
+                event.target.value = '';
+                return;
+            }
+            modalAttachment.file = file;
+            modalAttachment.removed = false;
+            event.target.value = '';
+            renderAttachmentUI();
+        }
+
+        function clearAttachmentSelection() { modalAttachment.file = null; renderAttachmentUI(); }
+        function removeAttachment() { modalAttachment.removed = true; modalAttachment.file = null; renderAttachmentUI(); }
+
+        function renderAttachmentUI() {
+            const box = document.getElementById('attachment-display');
+            if (!box) return;
+            let html = '';
+            if (modalAttachment.file) {
+                const m = getAttachmentMeta(modalAttachment.file.name);
+                html = `<div class="flex items-center gap-3 px-3 py-2 border rounded-md bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800">
+                            <i data-lucide="${m.icon}" class="w-5 h-5 ${m.color} shrink-0"></i>
+                            <span class="flex-1 text-sm text-slate-700 dark:text-slate-200 truncate" title="${modalAttachment.file.name}">${modalAttachment.file.name}</span>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 shrink-0">待上傳</span>
+                            <button type="button" onclick="clearAttachmentSelection()" class="text-rose-400 hover:text-rose-600 shrink-0" title="取消選擇"><i data-lucide="x" class="w-4 h-4"></i></button>
+                        </div>`;
+            } else if (modalAttachment.current && !modalAttachment.removed) {
+                const m = getAttachmentMeta(modalAttachment.current);
+                const fname = getAttachmentDisplayName(modalAttachment.current);
+                html = `<div class="flex items-center gap-3 px-3 py-2 border rounded-md bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800">
+                            <i data-lucide="${m.icon}" class="w-5 h-5 ${m.color} shrink-0"></i>
+                            <a href="${modalAttachment.current}" target="_blank" download="${fname}" class="flex-1 text-sm text-blue-600 dark:text-sky-400 truncate hover:underline" title="${fname}">${fname}</a>
+                            <button type="button" onclick="triggerAttachmentInput()" class="text-xs font-bold text-slate-500 hover:text-blue-600 dark:hover:text-sky-400 flex items-center gap-1 shrink-0"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>重新上傳</button>
+                            <button type="button" onclick="removeAttachment()" class="text-xs font-bold text-rose-400 hover:text-rose-600 flex items-center gap-1 shrink-0"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>刪除</button>
+                        </div>`;
+            } else {
+                html = `<button type="button" onclick="triggerAttachmentInput()" class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-blue-400 dark:hover:border-sky-500 hover:text-blue-600 dark:hover:text-sky-400 transition-colors w-full justify-center">
+                            <i data-lucide="upload" class="w-4 h-4"></i> 選擇檔案
+                        </button>`;
+            }
+            box.innerHTML = html;
+            lucide.createIcons();
+        }
+
         function mapDBtoFrontend(data) {
             return data.map(row => {
                 let flatItem = { ...row };
@@ -601,6 +690,13 @@
                         flatItem[colName] = (mp || url) ? (url ? `${mp}^${url}` : mp) : '';
                     });
                 }
+                // MP 欄為 DF1~PTI 各站 MP 的總和（取 '^' 前的數值加總，4 位小數避免浮點尾數）
+                const stationSum = stationColumns.reduce((sum, col) => {
+                    const raw = String(flatItem[col.toLowerCase()] || '').split('^')[0];
+                    const v = parseFloat(raw);
+                    return sum + (isNaN(v) ? 0 : v);
+                }, 0);
+                flatItem.benefit = Math.round(stationSum * 10000) / 10000;
                 return flatItem;
             });
         }
@@ -659,12 +755,50 @@
             const today = new Date().toISOString().split('T')[0];
 
             let targetDate = today;
+            let existingItem = null;
             if (mode === 'edit') {
                 const regId = parseInt(document.getElementById('modal-regid').value);
-                const item = appData.find(d => d.regId === regId);
-                if (item && item.date) {
-                    targetDate = item.date;
+                existingItem = appData.find(d => d.regId === regId);
+                if (existingItem && existingItem.date) {
+                    targetDate = existingItem.date;
                 }
+            }
+
+            // ⭐ 解析附件：依 modalAttachment 狀態決定上傳新檔 / 刪除舊檔 / 維持原狀
+            //    每步都以「原路徑」精準鎖定要被取代或刪除的檔，不會誤動其他任務的檔案。
+            let finalAttachment = modalAttachment.current || '';
+            try {
+                if (modalAttachment.file) {
+                    const fd = new FormData();
+                    fd.append('file', modalAttachment.file);
+                    let upRes = null;
+                    try {
+                        upRes = await fetch('/api/upload', { method: 'POST', body: fd });
+                    } catch (netErr) {
+                        // 預覽/離線模式：無法真正上傳，以本地檔名模擬路徑
+                        finalAttachment = '/Upload/' + modalAttachment.file.name;
+                    }
+                    if (upRes) {
+                        if (!upRes.ok) {
+                            const errJson = await upRes.json().catch(() => ({}));
+                            throw new Error(errJson.error || '檔案上傳失敗');
+                        }
+                        const upJson = await upRes.json();
+                        // 上傳成功後，刪除被取代的舊檔
+                        if (modalAttachment.current) {
+                            await fetch('/api/upload?path=' + encodeURIComponent(modalAttachment.current), { method: 'DELETE' }).catch(() => { });
+                        }
+                        finalAttachment = upJson.path;
+                    }
+                } else if (modalAttachment.removed) {
+                    if (modalAttachment.current) {
+                        await fetch('/api/upload?path=' + encodeURIComponent(modalAttachment.current), { method: 'DELETE' }).catch(() => { });
+                    }
+                    finalAttachment = '';
+                }
+            } catch (upErr) {
+                showToast('附件處理失敗：' + upErr.message, 'error');
+                return; // 中止儲存，避免任務資料與實體檔案不一致
             }
 
             const payload = {
@@ -681,6 +815,11 @@
                 tcd: mode === 'add' ? '' : document.getElementById('form-tcd').value,
                 appLink: mode === 'add' ? '' : document.getElementById('form-applink').value,
                 dataSource: mode === 'add' ? '' : document.getElementById('form-datasource').value,
+                // 以下欄位目前無對應表單輸入，編輯時保留原值避免被清空
+                notesId: existingItem ? (existingItem.notesId || '') : '',
+                remark: existingItem ? (existingItem.remark || '') : '',
+                remarkStatus: existingItem ? (existingItem.remarkStatus || '') : '',
+                attachment: finalAttachment,
                 stations: []
             };
 
@@ -766,6 +905,7 @@
 
             const reader = new FileReader();
             reader.onload = async (e) => {
+                let payloads = [];
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
@@ -783,6 +923,8 @@
 
                         if (text.includes('註冊日期') || text === 'date' || text === 'regdate') colMap.date = idx;
                         else if (text.includes('完成日期') || text.includes('completion')) colMap.compDate = idx;
+                        else if (text === 'regid' || text === '編號') colMap.regId = idx;
+                        else if (text === 'notesid' || text === 'notes id') colMap.notesId = idx;
 
                         else if (text === 'status' || text.includes('狀態')) colMap.status = idx;
                         else if (text.includes('dept') || text.includes('department')) colMap.dept = idx;
@@ -795,12 +937,13 @@
                         else if (text.includes('tcd')) colMap.tcd = idx;
                         else if (text.includes('applink') || text.includes('app link')) colMap.appLink = idx;
                         else if (text.includes('datasource') || text.includes('data source')) colMap.dataSource = idx;
+                        else if (text.includes('remark status') || text === 'remarkstatus' || text.includes('備註狀態')) colMap.remarkStatus = idx;
+                        else if (text === 'remark' || text.includes('備註')) colMap.remark = idx;
+                        else if (text.includes('attachment') || text.includes('附件')) colMap.attachment = idx;
                         stationColumns.forEach(st => { if (text === st.toLowerCase()) colMap[st.toLowerCase()] = idx; });
                     });
 
                     if (colMap.desc === undefined) throw new Error("找不到『需求摘要』欄位，請確認 Excel 格式。");
-
-                    const payloads = [];
                     for (let i = 1; i < rows.length; i++) {
                         const row = rows[i];
                         if (!row[colMap.desc]) continue;
@@ -837,8 +980,10 @@
                         if (importedStatus === '缺欄位') importedStatus = '確認中';
 
                         payloads.push({
+                            regId: parseInt(row[colMap.regId]) || 0,
                             date: dateStr,
                             completionDate: compDateStr,
+                            notesId: String(row[colMap.notesId] || ''),
                             status: importedStatus,
                             dept: row[colMap.dept] || '',
                             sec: row[colMap.sec] || '',
@@ -846,10 +991,13 @@
                             applicant: row[colMap.applicant] || '',
                             desc: row[colMap.desc] || '',
                             benefit: parseFloat(row[colMap.benefit]) || 0,
-                            dbCat: String(row[colMap.dbCat] || '').replace(/，/g, ','),
+                            dbCat: String(row[colMap.dbCat] || '').replace(/，/g, ',').replace(/／/g, '/'),
                             tcd: row[colMap.tcd] || '',
                             appLink: row[colMap.appLink] || '',
                             dataSource: row[colMap.dataSource] || '',
+                            remark: row[colMap.remark] || '',
+                            remarkStatus: row[colMap.remarkStatus] || '',
+                            attachment: row[colMap.attachment] || '',
                             stations: stations
                         });
                     }
@@ -888,10 +1036,10 @@
         function exportToExcel() {
             const data = getProcessedData();
             if (data.length === 0) return showToast('目前沒有符合條件的資料可以匯出！', 'error');
-            const headers = ['註冊日期', 'RegID', 'ITEM_NO', 'STATUS', 'DEPT', 'SECTION', '申請人', '需求摘要', '處理人員', 'TCD', '效益(MP/年)', 'DBCat', 'App LINK', 'Data Source', ...stationColumns];
+            const headers = ['註冊日期', 'RegID', 'NotesID', 'ITEM_NO', 'STATUS', 'DEPT', 'SECTION', '申請人', '需求摘要', '處理人員', 'TCD', '效益(MP/年)', 'DBCat', 'App LINK', 'Data Source', '完成日期', 'Remark', 'Remark Status', 'Attachment', ...stationColumns];
             const excelData = [headers];
             data.forEach(row => {
-                excelData.push([row.date, row.regId, row.itemNum, row.status, row.dept, row.sec, row.owner, row.desc, row.applicant, row.tcd, row.benefit || '', row.dbCat, row.appLink, row.dataSource, ...stationColumns.map(c => row[c.toLowerCase()] || '')]);
+                excelData.push([row.date, row.regId, row.notesId || '', row.itemNum, row.status, row.dept, row.sec, row.owner, row.desc, row.applicant, row.tcd, row.benefit || '', row.dbCat, row.appLink, row.dataSource, row.completionDate || '', row.remark || '', row.remarkStatus || '', row.attachment || '', ...stationColumns.map(c => row[c.toLowerCase()] || '')]);
             });
             const ws = XLSX.utils.aoa_to_sheet(excelData), wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "任務清單");
@@ -907,7 +1055,7 @@
                     item.dept.toLowerCase().includes(term) ||
                     (item.sec && item.sec.toLowerCase().includes(term)) ||
                     (item.applicant && item.applicant.toLowerCase().includes(term));
-                const matchesStatus = state.statusFilter === 'All' || item.status === state.statusFilter;
+                const matchesStatus = state.statusFilter === 'All' || item.status.includes(state.statusFilter);
 
                 // ⭐ 逐一檢查欄位過濾器 (Key值篩選)
                 let matchesColumn = true;
@@ -975,9 +1123,9 @@
             const totalBenefit = filteredData.reduce((s, i) => s + (Number(i.benefit) || 0), 0).toFixed(3);
             const kpis = [
                 { title: "總需求數量", value: appData.length, icon: "database", lightColor: "text-blue-600", lightBg: "bg-blue-50 border-blue-100", darkColor: "dark:text-sky-400", darkBorder: "dark:border-sky-400/30", darkGlow: "bg-sky-400" },
-                { title: "已上線完成", value: appData.filter(d => d.status === '已上線').length, icon: "check-circle", lightColor: "text-emerald-600", lightBg: "bg-emerald-50 border-emerald-100", darkColor: "dark:text-emerald-400", darkBorder: "dark:border-emerald-400/30", darkGlow: "bg-emerald-400" },
-                { title: "處理中專案", value: appData.filter(d => d.status === '處理中').length, icon: "clock", lightColor: "text-amber-600", lightBg: "bg-amber-50 border-amber-100", darkColor: "dark:text-amber-400", darkBorder: "dark:border-amber-400/30", darkGlow: "bg-amber-400" },
-                { title: "確認中專案", value: appData.filter(d => d.status === '確認中').length, icon: "help-circle", lightColor: "text-slate-600", lightBg: "bg-slate-50 border-slate-200", darkColor: "dark:text-slate-400", darkBorder: "dark:border-slate-700", darkGlow: "bg-slate-500" },
+                { title: "已上線完成", value: appData.filter(d => d.status.includes('已上線')).length, icon: "check-circle", lightColor: "text-emerald-600", lightBg: "bg-emerald-50 border-emerald-100", darkColor: "dark:text-emerald-400", darkBorder: "dark:border-emerald-400/30", darkGlow: "bg-emerald-400" },
+                { title: "處理中專案", value: appData.filter(d => d.status.includes('處理中')).length, icon: "clock", lightColor: "text-amber-600", lightBg: "bg-amber-50 border-amber-100", darkColor: "dark:text-amber-400", darkBorder: "dark:border-amber-400/30", darkGlow: "bg-amber-400" },
+                { title: "確認中專案", value: appData.filter(d => d.status.includes('確認中')).length, icon: "help-circle", lightColor: "text-slate-600", lightBg: "bg-slate-50 border-slate-200", darkColor: "dark:text-slate-400", darkBorder: "dark:border-slate-700", darkGlow: "bg-slate-500" },
                 { title: "預估總效益", value: totalBenefit, icon: "trending-up", lightColor: "text-purple-600", lightBg: "bg-purple-50 border-purple-100", darkColor: "dark:text-purple-400", darkBorder: "dark:border-purple-400/30", darkGlow: "bg-purple-400" },
             ];
 
@@ -1010,41 +1158,38 @@
             const safeFilterVal = filterVal.replace(/"/g, '&quot;');
             const hasFilter = filterVal.trim() !== '';
 
-            return `
-                        <th class="px-3 py-2.5 align-middle select-none group border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 hover:bg-[#f1f5f9] dark:hover:bg-slate-800 transition-colors ${className}">
-                            <div class="flex flex-col gap-1 h-full justify-center relative">
-                                <!-- 標題與 Icon 列 -->
-                                <div class="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest">
-                                    <div class="flex items-center cursor-pointer flex-1 ${className.includes('text-center') ? 'justify-center' : ''}" onclick="setSort('${sortKey}')">
-                                        ${label}
-                                        <div class="flex items-center -space-x-[2px] ml-1 transition-opacity">
-                                            <i data-lucide="arrow-up" class="w-[11px] h-[11px] ${isAsc ? 'text-blue-500 dark:text-sky-400 opacity-100' : 'text-blue-300 dark:text-slate-500 opacity-0 group-hover:opacity-100'} transition-all"></i>
-                                            <i data-lucide="arrow-down" class="w-[11px] h-[11px] ${isDesc ? 'text-blue-500 dark:text-sky-400 opacity-100' : 'text-blue-300 dark:text-slate-500 opacity-0 group-hover:opacity-100'} transition-all"></i>
-                                        </div>
-                                    </div>
-                                    <!-- 篩選按鈕 (有數值時常駐亮起，否則 hover 才顯示) -->
-                                    <button onclick="toggleFilter('${sortKey}', event)" class="p-1 ml-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors focus:outline-none ${hasFilter ? 'text-blue-600 dark:text-sky-400 opacity-100' : 'text-slate-300 dark:text-slate-500 opacity-0 group-hover:opacity-100'}">
-                                        <i data-lucide="filter" class="w-3 h-3"></i>
-                                    </button>
-                                </div>
+            const alignCenter = className.includes('text-center');
+            const alignRight = className.includes('text-right');
+            const justify = alignRight ? 'justify-end' : (alignCenter ? 'justify-center' : 'justify-start');
+            // CJK / 單字詞固定不換行；含空白的英文詞才允許在空白處折行
+            const wrapCls = /\s/.test(label) ? 'whitespace-normal' : 'whitespace-nowrap';
+            const sortIcon = isAsc ? 'arrow-up' : (isDesc ? 'arrow-down' : 'chevrons-up-down');
 
-                                <!-- 隱藏的輸入框 -->
-                                <div id="filter-box-${sortKey}" class="${hasFilter ? 'block' : 'hidden'} w-full mt-1 transition-all" onclick="event.stopPropagation()">
-                                    <div class="relative flex items-center">
-                                        <input type="text" id="filter-input-${sortKey}" placeholder="輸入篩選..." value="${safeFilterVal}"
-                                            onkeydown="if(event.key==='Enter') { this.blur(); }"
-                                            onblur="setColumnFilter('${sortKey}', this.value)"
-                                            class="w-full min-w-[60px] text-[11px] font-normal px-2 py-1 pr-6 border border-blue-200 dark:border-sky-500/50 rounded bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500 dark:focus:border-sky-400 focus:ring-1 focus:ring-blue-500/20 dark:focus:ring-sky-500/20 shadow-inner transition-all">
-                                        ${hasFilter ? `
-                                        <button onclick="clearFilter('${sortKey}', event)" class="absolute right-1 text-slate-400 hover:text-rose-500 transition-colors focus:outline-none">
-                                            <i data-lucide="x" class="w-3 h-3"></i>
-                                        </button>` : ''}
-                                    </div>
+            return `
+                        <th class="px-1.5 py-2.5 align-middle select-none group relative border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 hover:bg-[#f1f5f9] dark:hover:bg-slate-800 transition-colors ${className}">
+                            <div class="flex items-center gap-0.5 ${justify} cursor-pointer pr-3" onclick="setSort('${sortKey}')">
+                                <span class="text-[10px] font-bold tracking-tight leading-tight ${wrapCls} ${isActive ? 'text-blue-600 dark:text-sky-400' : 'text-slate-500 dark:text-slate-400'}">${label}</span>
+                                <i data-lucide="${sortIcon}" class="w-2.5 h-2.5 shrink-0 ${isActive ? 'text-blue-500 dark:text-sky-400 opacity-100' : 'text-slate-400 dark:text-slate-500 opacity-0 group-hover:opacity-60'} transition-opacity"></i>
+                            </div>
+                            <button onclick="event.stopPropagation();toggleFilter('${sortKey}', event)" class="absolute top-1 right-0.5 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors focus:outline-none ${hasFilter ? 'text-blue-600 dark:text-sky-400 opacity-100' : 'text-slate-300 dark:text-slate-500 opacity-0 group-hover:opacity-100'}" title="篩選">
+                                <i data-lucide="filter" class="w-2.5 h-2.5"></i>
+                            </button>
+                            <div id="filter-box-${sortKey}" class="${hasFilter ? 'block' : 'hidden'} w-full mt-1 transition-all" onclick="event.stopPropagation()">
+                                <div class="relative flex items-center">
+                                    <input type="text" id="filter-input-${sortKey}" placeholder="篩選..." value="${safeFilterVal}"
+                                        onkeydown="if(event.key==='Enter') { this.blur(); }"
+                                        onblur="setColumnFilter('${sortKey}', this.value)"
+                                        class="w-full text-[10px] font-normal px-1.5 py-0.5 pr-5 border border-blue-200 dark:border-sky-500/50 rounded bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500 dark:focus:border-sky-400 focus:ring-1 focus:ring-blue-500/20 dark:focus:ring-sky-500/20 shadow-inner transition-all">
+                                    ${hasFilter ? `
+                                    <button onclick="clearFilter('${sortKey}', event)" class="absolute right-0.5 text-slate-400 hover:text-rose-500 transition-colors focus:outline-none">
+                                        <i data-lucide="x" class="w-2.5 h-2.5"></i>
+                                    </button>` : ''}
                                 </div>
                             </div>
                         </th>
                     `;
         }
+
 
         // ⭐ 控制篩選框顯示/隱藏的函式
         function toggleFilter(key, event) {
@@ -1065,6 +1210,16 @@
             setColumnFilter(key, '');
         }
 
+        // 點「需求摘要」展開／收合該列下方的 DF1–PTI 站點 MP 明細列
+        function toggleStationDetail(regId, btnEl) {
+            const detailRow = document.querySelector(`tr.station-detail-row[data-detail-for="${regId}"]`);
+            if (!detailRow) return;
+            const nowOpen = detailRow.classList.toggle('hidden') === false;
+            // 旋轉箭頭指示展開狀態 (lucide 會把 <i> 換成 <svg>，故直接抓 svg)
+            const icon = btnEl.querySelector('svg') || btnEl.querySelector('.station-toggle-icon');
+            if (icon) icon.style.transform = nowOpen ? 'rotate(90deg)' : '';
+        }
+
         function renderContent() {
             const filtered = getProcessedData();
             let currentData;
@@ -1078,19 +1233,19 @@
             const contentContainer = document.getElementById('content-container');
 
             if (state.view === 'table') {
-                let stationHeaders = stationColumns.map(col => `<th class="px-2 py-3.5 text-center border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[60px] max-w-[100px] border-l border-slate-100 dark:border-slate-800/50">${col}</th>`).join('');
+                let stationHeaders = tableStationColumns.map(col => `<th class="px-2 py-3.5 text-center border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[60px] max-w-[100px] border-l border-slate-100 dark:border-slate-800/50">${col}</th>`).join('');
 
                 let rowsHtml = currentData.map(row => {
 
                     // 將原本的 DBCat 改為漂亮的 Tag 徽章
                     let dbCatHtml = `<span class="text-slate-300 dark:text-slate-600">-</span>`;
                     if (row.dbCat) {
-                        dbCatHtml = String(row.dbCat).split(',').map(cat =>
+                        dbCatHtml = String(row.dbCat).split(/[,\/]/).map(cat =>
                             `<span class="inline-block px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20 text-[10px] font-bold mr-1 mb-1 shadow-sm">${cat.trim()}</span>`
                         ).join('');
                     }
 
-                    let stationCells = stationColumns.map(col => {
+                    let stationCells = tableStationColumns.map(col => {
                         const val = row[col.toLowerCase()];
                         if (!val) return `<td class="px-2 py-2.5 text-center border-l border-slate-100 dark:border-slate-800/50"><span class="text-slate-300 dark:text-slate-600 font-medium dark:font-mono">-</span></td>`;
                         let mp = val, url = ''; if (val.includes('^')) { [mp, url] = val.split('^'); } else if (val.startsWith('http') || val.startsWith('Notes://')) { mp = 'Link'; url = val; }
@@ -1102,82 +1257,127 @@
                                             </td>`;
                     }).join('');
 
-                    let sqlBtn = row.dataSource ? `
-                                            <button onclick="viewSqlModal(${row.regId})" class="text-blue-500 hover:text-blue-700 dark:text-sky-400 dark:hover:text-white" title="檢視語法">
-                                                <i data-lucide="code" class="w-4 h-4 mx-auto"></i>
-                                            </button>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
+                    let sqlBtn = row.dataSource ? `<button onclick="event.stopPropagation();viewSqlModal(${row.regId})" class="inline-flex items-center justify-center p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-sky-50 dark:hover:bg-sky-500/20 hover:text-sky-600 dark:hover:text-sky-400 border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-sky-500/40 transition-all shadow-sm mx-auto" title="檢視語法內容"><i data-lucide="code" class="w-3.5 h-3.5"></i></button>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
 
-                    let tcdIcon = row.tcd ? `<i data-lucide="file-text" class="w-4 h-4 text-blue-500 hover:text-blue-700 dark:text-sky-400 dark:hover:text-white mx-auto cursor-pointer" title="開啟連結" onclick="window.open('${row.tcd.startsWith('http') ? row.tcd : '#'}')"></i>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
+                    let tcdIcon = row.tcd ? `<i data-lucide="file-text" class="w-4 h-4 text-blue-500 hover:text-blue-700 dark:text-sky-400 dark:hover:text-white mx-auto cursor-pointer" title="開啟文件連結" onclick="window.open('${row.tcd.startsWith('http') ? row.tcd : '#'}')"></i>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
 
                     let appLinkUrl = row.appLink && !row.appLink.startsWith('http') && !row.appLink.startsWith('Notes') ? 'http://' + row.appLink : row.appLink;
-                    let appLinkIcon = row.appLink ? `<i data-lucide="link" class="w-4 h-4 text-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-white mx-auto cursor-pointer" title="開啟 App Link" onclick="window.open('${appLinkUrl}')"></i>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
+                    let appLinkIcon = row.appLink ? `<i data-lucide="link" class="w-4 h-4 text-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-white mx-auto cursor-pointer" title="開啟網頁連結" onclick="window.open('${appLinkUrl}')"></i>` : `<span class="text-slate-200 dark:text-slate-600">-</span>`;
+
+                    let remarkStatusHtml = row.remarkStatus ? `<span class="inline-block px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400 border border-sky-200 dark:border-sky-500/20 text-[10px] font-bold shadow-sm">${row.remarkStatus}</span>` : `<span class="text-slate-300 dark:text-slate-600">-</span>`;
+
+                    let attachmentHtml = `<span class="text-slate-200 dark:text-slate-600">-</span>`;
+                    if (row.attachment) {
+                        const am = getAttachmentMeta(row.attachment);
+                        attachmentHtml = `<a href="${row.attachment}" target="_blank" download="${getAttachmentDisplayName(row.attachment)}" title="${getAttachmentDisplayName(row.attachment)}" onclick="event.stopPropagation()" class="inline-flex items-center justify-center hover:scale-110 transition-transform"><i data-lucide="${am.icon}" class="w-5 h-5 ${am.color}"></i></a>`;
+                    }
 
                     let actionHtml = `
-                                          <div class="flex items-center justify-center gap-3 opacity-30 group-hover:opacity-100 transition-opacity">
-                                            <button onclick="openModal('edit', ${row.regId})" class="text-blue-500 hover:text-blue-700 dark:text-sky-400 dark:hover:text-white" title="編輯">
+                                          <div class="flex items-center justify-center gap-3 opacity-40 group-hover:opacity-100 transition-opacity">
+                                            <button onclick="event.stopPropagation();openModal('edit', ${row.regId})" class="text-blue-500 hover:text-blue-700 dark:text-sky-400 dark:hover:text-white" title="編輯">
                                               <i data-lucide="pen-line" class="w-4 h-4"></i>
                                             </button>
-                                            <button onclick="deleteData(${row.regId})" class="text-rose-400 hover:text-rose-600 dark:hover:text-rose-400" title="刪除">
+                                            <button onclick="event.stopPropagation();deleteData(${row.regId})" class="text-rose-400 hover:text-rose-600 dark:hover:text-rose-400" title="刪除">
                                               <i data-lucide="trash-2" class="w-4 h-4"></i>
                                             </button>
                                           </div>
                                         `;
 
+                    // 站點 MP 明細 (DF1–PTI)：點「需求摘要」才展開的下方明細列內容
+                    let stationDetailCells = stationColumns.map(col => {
+                        const raw = row[col.toLowerCase()] || '';
+                        let mp = raw, url = '';
+                        if (raw.includes('^')) { [mp, url] = raw.split('^'); }
+                        else if (raw.startsWith('http') || raw.startsWith('Notes://')) { mp = 'Link'; url = raw; }
+                        const hasVal = raw !== '';
+                        return `<div class="flex flex-col items-center justify-center gap-0.5 px-2 py-1.5 rounded-lg border ${hasVal ? 'border-sky-200 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/10' : 'border-slate-200/60 bg-slate-50/40 dark:border-slate-800 dark:bg-slate-900/40'}">
+                                            <span class="text-[10px] font-bold tracking-tight ${hasVal ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400 dark:text-slate-600'}">${col}</span>
+                                            <span class="text-[11px] font-semibold dark:font-mono flex items-center gap-1 ${hasVal ? 'text-slate-700 dark:text-slate-200' : 'text-slate-300 dark:text-slate-700'}">
+                                                ${hasVal ? mp : '-'}
+                                                ${url ? `<a href="${url}" target="_blank" onclick="event.stopPropagation()" class="text-blue-500 dark:text-sky-400 hover:opacity-70"><i data-lucide="external-link" class="w-3 h-3"></i></a>` : ''}
+                                            </span>
+                                          </div>`;
+                    }).join('');
+
                     return `
                                     <tr class="table-row-hover border-b border-slate-50 dark:border-slate-800/50 bg-white dark:bg-transparent group cursor-default">
-                                      <td class="px-3 py-2.5 sticky left-0 z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] text-slate-500 dark:text-slate-400 text-xs dark:font-mono font-medium w-[90px] min-w-[90px] border-r border-slate-100/50 dark:border-slate-800/50">${row.date}</td>
-                                      <td class="px-3 py-2.5 text-center sticky left-[90px] z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] font-mono text-slate-500 dark:text-slate-400 text-xs font-medium w-[90px] min-w-[90px] border-r border-slate-100/50 dark:border-slate-800/50">${row.completionDate || '-'}</td>
-                                      <td class="px-3 py-2.5 text-center sticky left-[180px] z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] font-mono font-semibold text-blue-500 dark:text-sky-400 text-[13px] dark:text-[12px] w-[60px] min-w-[60px] border-r border-slate-100/50 dark:border-slate-800/50">#${row.regId}</td>
-                                      <td class="px-3 py-2.5 text-center sticky left-[240px] z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] font-bold text-emerald-500 dark:text-white text-xs dark:text-[12px] w-[70px] min-w-[70px] sticky-left-shadow">${row.itemNum}</td>
-                                      <td class="px-3 py-2.5 w-[100px] min-w-[100px]">
-                                          <span class="inline-flex items-center px-1.5 py-0.5 rounded-[6px] text-[11px] font-bold border whitespace-nowrap dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${getStatusColorClass(row.status)}">
+                                      <td class="px-1.5 py-1.5 text-slate-500 dark:text-slate-400 text-[10px] dark:font-mono font-medium border-r border-slate-100/50 dark:border-slate-800/50 text-center">${row.completionDate || '-'}</td>
+                                      <td class="px-1.5 py-1.5 text-center font-mono text-slate-500 dark:text-slate-400 text-[10px] font-medium border-r border-slate-100/50 dark:border-slate-800/50">${row.date}</td>
+                                      <td class="px-1.5 py-1.5">
+                                          <span class="inline-flex items-center px-1.5 py-0.5 rounded-[6px] text-[10px] font-bold border whitespace-nowrap dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${getStatusColorClass(row.status)}">
                                              ${getStatusIconTag(row.status)} ${row.status}
                                           </span>
                                       </td>
-                                      <td class="px-3 py-2.5 min-w-[70px] max-w-[120px] whitespace-normal break-words"><span class="text-[12px] font-semibold text-slate-700 dark:text-slate-200">${row.dept}</span></td>
-                                      <td class="px-3 py-2.5 min-w-[70px] max-w-[120px] whitespace-normal break-words"><span class="text-[12px] font-medium text-slate-500 dark:text-slate-400 dark:font-mono">${row.sec || '-'}</span></td>
-                                      <td class="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-300 text-[12px] min-w-[80px] max-w-[150px] whitespace-normal break-words">${row.owner || '-'}</td>
-                                      <td class="px-3 py-2.5 min-w-[350px] max-w-[500px] whitespace-normal break-words leading-relaxed text-slate-600 dark:text-slate-300 text-[13px] dark:text-[12px] font-medium">${row.desc}</td>
-                                      <td class="px-3 py-2.5 text-slate-500 dark:text-slate-400 text-[12px] font-medium min-w-[90px] max-w-[150px] whitespace-normal break-words">${row.applicant || '-'}</td>
-                                      <td class="px-3 py-2.5 text-center min-w-[50px]">${tcdIcon}</td>
-                                      <td class="px-3 py-2.5 text-center min-w-[50px]">${appLinkIcon}</td>
-                                      <td class="px-3 py-2.5 font-semibold dark:font-mono text-right text-xs dark:text-[12px] min-w-[80px] ${row.benefit > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}">${row.benefit > 0 ? row.benefit : '-'}</td>
-                                      <td class="px-3 py-2.5 text-[12px] font-medium dark:font-mono text-slate-400 min-w-[100px] max-w-[200px] text-center whitespace-normal">${dbCatHtml}</td>
-                                      <td class="px-3 py-2.5 text-center min-w-[50px]">${sqlBtn}</td>
+                                      <td class="px-1.5 py-1.5 whitespace-normal break-words"><span class="text-[11px] font-semibold text-slate-700 dark:text-slate-200">${row.dept}</span></td>
+                                      <td class="px-1.5 py-1.5 whitespace-normal break-words"><span class="text-[11px] font-medium text-slate-500 dark:text-slate-400 dark:font-mono">${row.sec || '-'}</span></td>
+                                      <td class="px-1.5 py-1.5 font-medium text-slate-700 dark:text-slate-300 text-[11px] whitespace-normal break-words">${row.owner || '-'}</td>
+                                      <td class="px-1.5 py-1.5 whitespace-normal break-words leading-snug text-slate-600 dark:text-slate-300 text-[11px] font-medium">
+                                        <button type="button" onclick="event.stopPropagation();toggleStationDetail(${row.regId}, this)" class="text-left w-full inline-flex items-start gap-1 group/desc hover:text-sky-600 dark:hover:text-sky-400 transition-colors" title="點擊展開／收合 DF1–PTI 站點 MP 明細">
+                                          <i data-lucide="chevron-right" class="station-toggle-icon w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-400 group-hover/desc:text-sky-500 transition-transform duration-200"></i>
+                                          <span>${row.desc}</span>
+                                        </button>
+                                      </td>
+                                      <td class="px-1.5 py-1.5 text-slate-500 dark:text-slate-400 text-[11px] font-medium whitespace-normal break-words">${row.applicant || '-'}</td>
+                                      <td class="px-1 py-1.5 text-center">${tcdIcon}</td>
+                                      <td class="px-1 py-1.5 text-center">${appLinkIcon}</td>
+                                      <td class="px-1.5 py-1.5 font-semibold dark:font-mono text-right text-[11px] ${row.benefit > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}">${row.benefit > 0 ? row.benefit : '-'}</td>
+                                      <td class="px-1.5 py-1.5 text-[11px] font-medium dark:font-mono text-slate-400 text-center whitespace-normal break-words">${dbCatHtml}</td>
+                                      <td class="px-1 py-1.5 text-center">${sqlBtn}</td>
+                                      <td class="px-1.5 py-1.5 text-center font-mono text-[10px] text-slate-500 dark:text-slate-400 break-all">${row.notesId || '<span class="text-slate-300 dark:text-slate-600">-</span>'}</td>
+                                      <td class="px-1.5 py-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 whitespace-normal break-words leading-snug">${row.remark || '<span class="text-slate-300 dark:text-slate-600">-</span>'}</td>
+                                      <td class="px-1.5 py-1.5 text-center">${remarkStatusHtml}</td>
+                                      <td class="px-1.5 py-1.5 text-center">${attachmentHtml}</td>
                                       ${stationCells}
-                                      <td class="px-2 py-2.5 sticky right-0 z-10 bg-white group-hover:bg-[#f8fafc] dark:bg-slate-900 dark:group-hover:bg-[#121c2c] text-center sticky-right-shadow">
+                                      <td class="px-1.5 py-1.5 text-center border-l border-slate-100/50 dark:border-slate-800/50">
                                         ${actionHtml}
+                                      </td>
+                                    </tr>
+                                    <tr class="station-detail-row hidden bg-sky-50/40 dark:bg-sky-500/[0.03] border-b border-slate-100 dark:border-slate-800/50" data-detail-for="${row.regId}">
+                                      <td colspan="${18 + tableStationColumns.length}" class="px-4 py-3">
+                                        <div class="flex items-center gap-1.5 mb-2">
+                                          <i data-lucide="layout-grid" class="w-3.5 h-3.5 text-sky-500"></i>
+                                          <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400">站點 MP 明細 (DF1–PTI)</span>
+                                          <span class="text-[10px] font-medium text-slate-400 dark:text-slate-500">合計 MP = <span class="font-bold text-emerald-500 dark:text-emerald-400">${row.benefit > 0 ? row.benefit : 0}</span></span>
+                                        </div>
+                                        <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-9 xl:grid-cols-[repeat(17,minmax(0,1fr))] gap-1.5">
+                                          ${stationDetailCells}
+                                        </div>
                                       </td>
                                     </tr>
                                   `;
                 }).join('');
 
                 if (currentData.length === 0) {
-                    rowsHtml = `<tr><td colspan="${15 + stationColumns.length}" class="px-4 py-16 text-center text-slate-500 font-bold tracking-widest opacity-60">找不到符合條件的資料。</td></tr>`;
+                    rowsHtml = `<tr><td colspan="${18 + tableStationColumns.length}" class="px-4 py-16 text-center text-slate-500 font-bold tracking-widest opacity-60">找不到符合條件的資料。</td></tr>`;
                 }
 
                 contentContainer.innerHTML = `
                                   <div class="w-full overflow-x-auto bg-white dark:bg-slate-900 rounded-xl dark:rounded-none border border-slate-200 dark:border-none shadow-sm dark:shadow-none">
-                                    <table class="w-full text-left whitespace-nowrap min-w-max border-collapse">
+                                    <table class="w-full table-fixed text-left whitespace-normal break-words border-collapse text-[10px] md:text-[11px]">
+                                      <colgroup>
+                                        <col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:6%"><col style="width:12.5%"><col style="width:6%"><col style="width:4%"><col style="width:5.5%"><col style="width:4%"><col style="width:6.5%"><col style="width:6%"><col style="width:5.5%"><col style="width:11%"><col style="width:5.5%"><col style="width:4.5%">${tableStationColumns.map(() => '<col style="width:4%">').join('')}<col style="width:5%">
+                                      </colgroup>
                                       <thead>
                                         <tr>
-                                          ${renderSortHeader('註冊日期', 'date', 'sticky left-0 z-30 border-r border-slate-200/60 dark:border-slate-800/50')}
-                                          ${renderSortHeader('完成日期', 'completionDate', 'sticky left-[90px] z-30 border-r border-slate-200/60 dark:border-slate-800/50 min-w-[90px] text-center')}
-                                          ${renderSortHeader('ID', 'regId', 'text-center sticky left-[180px] z-30 border-r border-slate-200/60 dark:border-slate-800/50')}
-                                          ${renderSortHeader('Item No.', 'itemNum', 'text-center sticky left-[240px] z-30 sticky-left-shadow')}
-                                          ${renderSortHeader('Status', 'status', '')}
-                                          ${renderSortHeader('Dept', 'dept', 'min-w-[60px] max-w-[100px]')}
-                                          ${renderSortHeader('Section', 'sec', 'min-w-[60px] max-w-[100px]')}
-                                          ${renderSortHeader('申請人', 'owner', 'min-w-[70px] max-w-[120px]')}
-                                          ${renderSortHeader('需求摘要', 'desc', 'min-w-[300px] max-w-[450px]')}
-                                          ${renderSortHeader('處理人員', 'applicant', 'min-w-[80px] max-w-[120px]')}
-                                          <th class="px-3 py-3.5 border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[50px]">TCD</th>
-                                          <th class="px-3 py-3.5 border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[70px]">App Link</th>
-                                          ${renderSortHeader('MP', 'benefit', 'text-right min-w-[70px]')}
-                                          ${renderSortHeader('DBCat', 'dbCat', 'text-center min-w-[100px] max-w-[200px]')}
-                                          <th class="px-3 py-3.5 border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest min-w-[70px]">Data Source</th>
+                                          ${renderSortHeader('完成日期', 'completionDate', 'border-r border-slate-200/60 dark:border-slate-800/50 px-1.5')}
+                                          ${renderSortHeader('註冊日期', 'date', 'border-r border-slate-200/60 dark:border-slate-800/50 text-center px-1.5')}
+                                          ${renderSortHeader('Status', 'status', 'px-1.5')}
+                                          ${renderSortHeader('Dept', 'dept', 'px-1.5')}
+                                          ${renderSortHeader('Section', 'sec', 'px-1.5')}
+                                          ${renderSortHeader('申請人', 'owner', 'px-1.5')}
+                                          ${renderSortHeader('需求摘要', 'desc', 'px-1.5')}
+                                          ${renderSortHeader('處理人員', 'applicant', 'px-1.5')}
+                                          ${renderSortHeader('TCD', 'tcd', 'text-center px-1.5')}
+                                          ${renderSortHeader('App Link', 'appLink', 'text-center px-1.5')}
+                                          ${renderSortHeader('MP', 'benefit', 'text-right px-1.5')}
+                                          ${renderSortHeader('DBCat', 'dbCat', 'text-center px-1.5')}
+                                          ${renderSortHeader('Data Source', 'dataSource', 'text-center px-1.5')}
+                                          ${renderSortHeader('NotesID', 'notesId', 'text-center px-1.5')}
+                                          ${renderSortHeader('Remark', 'remark', 'px-1.5')}
+                                          ${renderSortHeader('Remark Status', 'remarkStatus', 'text-center px-1.5')}
+                                          ${renderSortHeader('附件', 'attachment', 'text-center px-1.5')}
                                           ${stationHeaders}
-                                          <th class="px-2 py-3.5 sticky right-0 z-30 border-b border-slate-200/60 dark:border-slate-800/50 bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest sticky-right-shadow">Action</th>
+                                          <th class="px-1.5 py-2.5 border-b border-slate-200/60 dark:border-slate-800/50 border-l bg-[#f8fafc] dark:bg-slate-900/80 text-center text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-tight whitespace-nowrap">Action</th>
                                         </tr>
                                       </thead>
                                       <tbody class="divide-y divide-slate-100 dark:divide-transparent">${rowsHtml}</tbody>
@@ -1191,7 +1391,7 @@
 
                     let dbCatTags = '';
                     if (row.dbCat) {
-                        dbCatTags = String(row.dbCat).split(',').map(cat =>
+                        dbCatTags = String(row.dbCat).split(/[,\/]/).map(cat =>
                             `<span class="inline-block px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20 text-[10px] font-bold mr-1 mb-1 shadow-sm">${cat.trim()}</span>`
                         ).join('');
                     }
@@ -1225,7 +1425,7 @@
                                         </div>
                                         <div class="text-right shrink-0 flex flex-col items-end">
                                         <div class="text-[14px] font-bold text-blue-600 dark:text-sky-400 font-mono">#${row.regId}</div>
-                                        <div class="text-[11px] font-medium text-slate-400 dark:text-slate-500 font-mono mt-0.5">${row.date}</div>
+                                        <div class="text-[11px] font-medium text-slate-400 dark:text-slate-500 font-mono mt-0.5">${row.completionDate || '-'}</div>
                                         </div>
                                     </div>
 
@@ -1237,8 +1437,8 @@
                                         <span class="font-medium text-slate-700 dark:text-slate-300">${row.applicant || '未指派'}</span>
                                         </div>
                                         <div class="flex justify-between items-center text-[13px]">
-                                        <span class="text-slate-500 dark:text-slate-400 font-medium">完成日期</span>
-                                        <span class="font-medium font-mono text-slate-700 dark:text-slate-300">${row.completionDate || '-'}</span>
+                                        <span class="text-slate-500 dark:text-slate-400 font-medium">註冊日期</span>
+                                        <span class="font-medium font-mono text-slate-700 dark:text-slate-300">${row.date}</span>
                                         </div>
                                         <div class="flex justify-between items-center text-[13px]">
                                         <span class="text-slate-500 dark:text-slate-400 font-medium">部門/課別</span>
@@ -1338,6 +1538,7 @@
             currentDbCats = [];
             document.getElementById('form-dbcat-input').value = '';
             document.getElementById('form-comp-date').value = '';
+            modalAttachment = { current: '', file: null, removed: false };
 
             if (mode === 'add') {
                 document.getElementById('modal-title').innerHTML = '<i data-lucide="plus-circle" class="w-5 h-5 text-blue-600 dark:text-sky-400"></i> 新增任務';
@@ -1362,9 +1563,10 @@
                     document.getElementById('form-applink').value = item.appLink || '';
                     document.getElementById('form-datasource').value = item.dataSource || '';
                     document.getElementById('form-comp-date').value = item.completionDate || '';
+                    modalAttachment.current = item.attachment || '';
 
                     if (item.dbCat) {
-                        currentDbCats = String(item.dbCat).split(',').map(s => s.trim()).filter(s => s);
+                        currentDbCats = String(item.dbCat).split(/[,\/]/).map(s => s.trim()).filter(s => s);
                     }
 
                     document.getElementById('form-stations-grid').innerHTML = stationColumns.map(col => {
@@ -1389,6 +1591,7 @@
                 }
             }
             renderDbCatTags();
+            renderAttachmentUI();
             modal.classList.remove('hidden'); lucide.createIcons();
             setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10);
         }
@@ -1562,7 +1765,7 @@
                 statusVal = statusVal.trim();
                 dbCatVal = dbCatVal.trim();
 
-                const dbCatArr = dbCatVal.split(',')
+                const dbCatArr = dbCatVal.split(/[,\/]/)
                     .map(s => s.trim().toUpperCase())
                     .filter(s => s !== '' && s !== '-' && s !== 'NULL' && s !== 'UNDEFINED' && s !== 'N/A');
                 const plugCount = dbCatArr.length > 0 ? dbCatArr.length : 1;
@@ -1817,8 +2020,8 @@
             data.forEach(item => {
                 let statusVal = String(item.status || item['狀態'] || '').trim();
 
-                // ⭐ 需求 2: 僅統計 status 為 '已上線' 的資料
-                if (statusVal !== '已上線') return;
+                // ⭐ 需求 2: 僅統計 status 包含 '已上線' 的資料
+                if (!statusVal.includes('已上線')) return;
 
                 let deptVal = '';
                 let dbCatVal = '';
@@ -1833,7 +2036,7 @@
                 deptVal = deptVal.trim() || '未指定';
                 dbCatVal = dbCatVal.trim();
 
-                const dbCatArr = dbCatVal.split(',')
+                const dbCatArr = dbCatVal.split(/[,\/]/)
                     .map(s => s.trim().toUpperCase())
                     .filter(s => s !== '' && s !== '-' && s !== 'NULL' && s !== 'UNDEFINED' && s !== 'N/A');
 

@@ -1,0 +1,31 @@
+USE [WEB]
+GO
+
+/****** Object:  Table [dbo].[TaskCenter]  (測試階段：無 Key、無限制條件，可自由調整) ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[TaskCenter](
+	[RegDate] [date] NULL,
+	[RegId] [int] NULL,
+	[NotesID] [nvarchar](50) NULL,
+	[Status] [nvarchar](50) NULL,
+	[Owner] [nvarchar](100) NULL,
+	[DBCat] [nvarchar](500) NULL,
+	[Description] [nvarchar](max) NULL,
+	[Applicant] [nvarchar](100) NULL,
+	[Department] [nvarchar](50) NULL,
+	[Section] [nvarchar](50) NULL,
+	[TCD] [nvarchar](max) NULL,
+	[Benefit] [float] NULL,
+	[AppLink] [nvarchar](max) NULL,
+	[DataSource] [nvarchar](max) NULL,
+	[CompletionDate] [date] NULL,
+	[Remark] [nvarchar](max) NULL,
+	[RemarkStatus] [nvarchar](50) NULL,
+	[Attachment] [nvarchar](max) NULL
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
