@@ -31,15 +31,14 @@
             {
               "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "ServiceCenter",
+              "Title": "ServiceCenter.csproj",
               "DocumentMoniker": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\ServiceCenter.csproj",
               "RelativeDocumentMoniker": "ServiceCenter\\ServiceCenter.csproj",
               "ToolTip": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\ServiceCenter.csproj",
               "RelativeToolTip": "ServiceCenter\\ServiceCenter.csproj",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2026-05-30T11:30:53.483Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-05-30T11:30:53.483Z"
             },
             {
               "$type": "Document",
@@ -51,8 +50,7 @@
               "RelativeToolTip": "ServiceCenter\\wwwroot\\index.html",
               "ViewState": "AgIAAP8HAAAAAAAAAAAAABsIAAAHAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001512|",
-              "WhenOpened": "2026-04-29T14:51:48.326Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-04-29T14:51:48.326Z"
             },
             {
               "$type": "Document",
@@ -62,7 +60,7 @@
               "RelativeDocumentMoniker": "ServiceCenter\\Program.cs",
               "ToolTip": "C:\\ServiceCenter\\ServiceCenter\\ServiceCenter\\Program.cs",
               "RelativeToolTip": "ServiceCenter\\Program.cs",
-              "ViewState": "AgIAAHUAAAAAAAAAAAAgwH0AAAA/AAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAHoAAAAtAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-04-29T14:50:50.766Z",
               "EditorCaption": ""

@@ -77,5 +77,5 @@ C:\ServiceCenter\ServiceCenter\ServiceCenter\bin\Debug\net9.0\ServiceCenter.runt
 C:\ServiceCenter\ServiceCenter\ServiceCenter\bin\Debug\net9.0\ServiceCenter.pdb
 C:\ServiceCenter\ServiceCenter\ServiceCenter\obj\Debug\net9.0\ServiceCenter.genruntimeconfig.cache
 C:\ServiceCenter\ServiceCenter\ServiceCenter\obj\Debug\net9.0\ref\ServiceCenter.dll
-C:\ServiceCenter\ServiceCenter\ServiceCenter\obj\Debug\net9.0\compressed\go8bw5lvew-u0o4fpz55m.gz
 C:\ServiceCenter\ServiceCenter\ServiceCenter\obj\Debug\net9.0\staticwebassets.upToDateCheck.txt
+C:\ServiceCenter\ServiceCenter\ServiceCenter\obj\Debug\net9.0\compressed\go8bw5lvew-pdzyovxjka.gz

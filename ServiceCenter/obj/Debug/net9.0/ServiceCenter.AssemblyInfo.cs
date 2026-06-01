@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ServiceCenter")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c858330e0dec2a397913d7372e58f895dab4ab11")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+694ba7a319742ef7c8dd99fd153f47aca1aa849b")]
 [assembly: System.Reflection.AssemblyProductAttribute("ServiceCenter")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ServiceCenter")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

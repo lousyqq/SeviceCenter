@@ -949,6 +949,7 @@
                         if (!row[colMap.desc]) continue;
 
                         let stations = [];
+                        let hasMpData = false;
                         stationColumns.forEach(st => {
                             let val = row[colMap[st.toLowerCase()]];
                             if (val) {
@@ -956,8 +957,28 @@
                                 let mp = val, url = '';
                                 if (val.includes('^')) { [mp, url] = val.split('^'); } else if (val.startsWith('http') || val.startsWith('Notes://')) { mp = 'Link'; url = val; }
                                 stations.push({ stationName: st, mpValue: mp, urlLink: url });
+                                if (mp && mp !== 'Link' && !isNaN(parseFloat(mp))) {
+                                    hasMpData = true;
+                                }
                             }
                         });
+
+                        let importedBenefit = parseFloat(row[colMap.benefit]) || 0;
+                        let importedDept = String(row[colMap.dept] || '').trim().toUpperCase();
+
+                        if (!hasMpData && importedBenefit !== 0 && importedDept) {
+                            let matchSt = stationColumns.find(st => st.toUpperCase() === importedDept);
+                            if (matchSt) {
+                                let existingSt = stations.find(s => s.stationName.toUpperCase() === matchSt.toUpperCase());
+                                if (existingSt) {
+                                    if (!existingSt.mpValue || existingSt.mpValue === 'Link') {
+                                        existingSt.mpValue = String(importedBenefit);
+                                    }
+                                } else {
+                                    stations.push({ stationName: matchSt, mpValue: String(importedBenefit), urlLink: '' });
+                                }
+                            }
+                        }
 
                         function parseDateValue(raw) {
                             if (!raw) return '';
