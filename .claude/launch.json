@@ -6,6 +6,12 @@
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--no-launch-profile", "--project", "ServiceCenter", "--urls", "http://127.0.0.1:5278"],
       "port": 5278
+    },
+    {
+      "name": "progress-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/CattTask/.xlsxbuild/static-server.js"],
+      "port": 5055
     }
   ]
 }

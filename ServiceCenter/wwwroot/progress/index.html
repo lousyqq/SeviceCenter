@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MSD 專案週報中心</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } }
+    };
+  </script>
+  <style>
+    body { font-family: Inter, 'Microsoft JhengHei', system-ui, sans-serif; }
+    .gantt-grid { display: grid; grid-template-columns: 300px repeat(53, 26px); align-items: stretch; }
+    .bar { border-radius: 4px; font-size: 10px; line-height: 1.1; padding: 2px 3px; overflow: hidden; white-space: nowrap;
+           display: flex; align-items: center; justify-content: center; color: #1f2937; height: 20px; margin: 2px 0; }
+    .c-gold { background: #FFD966; } .c-green { background: #C6E0B4; }
+    .c-blue { background: #BDD7EE; } .c-pink { background: #F4B6C7; }
+    .wk-now { background: rgba(59,130,246,.12); }
+    .dark .wk-now { background: rgba(59,130,246,.22); }
+    ::-webkit-scrollbar { width: 9px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 5px; }
+    .dark ::-webkit-scrollbar-thumb { background: #475569; }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen">
+
+  <!-- ===== Login gate ===== -->
+  <div id="loginView" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-100 dark:bg-slate-900">
+    <div class="w-[380px] bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 border border-slate-200 dark:border-slate-700">
+      <div class="flex items-center gap-2 mb-6">
+        <i data-lucide="gantt-chart-square" class="w-7 h-7 text-blue-600"></i>
+        <h1 class="text-xl font-bold">MSD 專案週報中心</h1>
+      </div>
+      <label class="block text-sm text-slate-500 mb-1">選擇登入者</label>
+      <select id="loginUser" class="w-full mb-4 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"></select>
+      <label class="block text-sm text-slate-500 mb-1">身分</label>
+      <div class="flex gap-2 mb-6">
+        <button data-role="member" class="role-btn flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-600">成員</button>
+        <button data-role="manager" class="role-btn flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-600">主管</button>
+      </div>
+      <button id="loginBtn" class="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">登入</button>
+      <p class="text-xs text-slate-400 mt-4 text-center">框架原型 · 資料暫存於瀏覽器 localStorage</p>
+    </div>
+  </div>
+
+  <!-- ===== App ===== -->
+  <div id="appView" class="hidden">
+    <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
+      <div class="max-w-[1600px] mx-auto px-4 py-2.5 flex items-center gap-3">
+        <i data-lucide="gantt-chart-square" class="w-6 h-6 text-blue-600"></i>
+        <span class="font-bold">MSD 專案週報中心</span>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700">2026</span>
+
+        <nav class="ml-4 flex gap-1" id="tabs">
+          <button data-tab="gantt" class="tab-btn px-3 py-1.5 rounded-lg text-sm">甘特圖總覽</button>
+          <button data-tab="checkin" class="tab-btn px-3 py-1.5 rounded-lg text-sm">本週打卡</button>
+          <button data-tab="dashboard" class="tab-btn px-3 py-1.5 rounded-lg text-sm hidden">主管儀表板</button>
+        </nav>
+
+        <div class="ml-auto flex items-center gap-2">
+          <div class="flex items-center gap-1 text-sm">
+            <button id="weekPrev" class="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+            <span id="weekLabel" class="font-mono w-28 text-center"></span>
+            <button id="weekNext" class="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+          </div>
+          <span id="whoami" class="text-sm px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"></span>
+          <button id="themeToggle" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i data-lucide="moon" class="w-4 h-4"></i></button>
+          <button id="logoutBtn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" title="登出"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-[1600px] mx-auto px-4 py-4">
+      <!-- Gantt -->
+      <section id="tab-gantt" class="tab-panel">
+        <div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
+          <span class="legend px-2 py-1 rounded" style="background:#FF99CC">a: 公司性一級專案/KPI</span>
+          <span class="legend px-2 py-1 rounded" style="background:#FFFF00">b: 部門重大貢獻及亮點</span>
+          <span class="legend px-2 py-1 rounded" style="background:#00FFFF">c: 日常管理</span>
+          <span class="legend px-2 py-1 rounded" style="background:#DDEBF7">d: 其他加分項</span>
+          <span class="ml-auto text-slate-400">綠框＝我本週已回報的專案</span>
+        </div>
+        <div class="overflow-auto border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800">
+          <div id="ganttHead"></div>
+          <div id="ganttBody"></div>
+        </div>
+      </section>
+
+      <!-- Check-in -->
+      <section id="tab-checkin" class="tab-panel hidden">
+        <div class="mb-4 p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+          <div class="flex items-center gap-2">
+            <i data-lucide="calendar-check" class="w-5 h-5 text-blue-600"></i>
+            <h2 class="font-semibold"><span id="ciUser"></span> 的本週工作回報</h2>
+            <span id="ciWeek" class="text-sm text-slate-400"></span>
+            <span id="ciSaved" class="ml-auto text-sm text-green-600 hidden"><i data-lucide="check-circle" class="w-4 h-4 inline"></i> 已儲存</span>
+          </div>
+          <p class="text-sm text-slate-400 mt-1">勾選本週有進度的專案並描述你做了什麼；不屬於既有專案的，請填在下方「其他項目」。</p>
+        </div>
+
+        <div id="ciProjects" class="space-y-2"></div>
+
+        <div class="mt-6">
+          <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="folder-plus" class="w-5 h-5 text-amber-600"></i>
+            <h3 class="font-semibold">其他項目（不在既有專案內的工作）</h3>
+            <button id="addOther" class="ml-auto text-sm px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200">+ 新增一項</button>
+          </div>
+          <div id="ciOthers" class="space-y-2"></div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+          <button id="saveDraft" class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600">儲存草稿</button>
+          <button id="submitReport" class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold">送出本週回報</button>
+        </div>
+      </section>
+
+      <!-- Dashboard -->
+      <section id="tab-dashboard" class="tab-panel hidden">
+        <div id="dashCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+        <div id="dashMembers" class="space-y-3"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="projects.data.js"></script>
+  <script>
+  const D = window.APP_DATA;
+  const COLOR = { gold: 'c-gold', green: 'c-green', blue: 'c-blue', pink: 'c-pink' };
+  const STATUS = ['未開始', '進行中', '已完成', '暫停'];
+  const LS_KEY = 'msd_weekly_reports';
+
+  const state = {
+    user: null, role: 'member', week: currentWeek(), tab: 'gantt',
+    reports: JSON.parse(localStorage.getItem(LS_KEY) || '{}'),
+  };
+
+  function currentWeek() {
+    const now = new Date();
+    if (now.getFullYear() !== D.year) return 1;
+    const start = new Date(D.year, 0, 1);
+    const w = Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
+    return Math.min(Math.max(w, 1), D.weeks);
+  }
+  function weekDates(w) {
+    const start = new Date(D.year, 0, 1 + (w - 1) * 7);
+    const end = new Date(start.getTime() + 6 * 86400000);
+    const f = d => `${d.getMonth() + 1}/${d.getDate()}`;
+    return `${f(start)}–${f(end)}`;
+  }
+  function saveReports() { localStorage.setItem(LS_KEY, JSON.stringify(state.reports)); }
+  function reportKey(week, user) { return `${week}::${user}`; }
+  function getReport(week, user) {
+    const k = reportKey(week, user);
+    if (!state.reports[k]) state.reports[k] = { projects: {}, others: [], submitted: false, ts: null };
+    return state.reports[k];
+  }
+  function projectsOf(owner) { return D.projects.filter(p => p.owner === owner); }
+
+  // ---------- Login ----------
+  function initLogin() {
+    const sel = document.getElementById('loginUser');
+    sel.innerHTML = D.owners.map(o => `<option>${o}</option>`).join('');
+    document.querySelectorAll('.role-btn').forEach(b => b.onclick = () => {
+      state.role = b.dataset.role;
+      document.querySelectorAll('.role-btn').forEach(x => x.classList.remove('bg-blue-600', 'text-white', 'border-blue-600'));
+      b.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+    });
+    document.querySelector('.role-btn').click();
+    document.getElementById('loginBtn').onclick = () => {
+      state.user = sel.value;
+      document.getElementById('loginView').classList.add('hidden');
+      document.getElementById('appView').classList.remove('hidden');
+      startApp();
+    };
+  }
+
+  // ---------- App shell ----------
+  function startApp() {
+    document.getElementById('whoami').textContent = `${state.user}（${state.role === 'manager' ? '主管' : '成員'}）`;
+    document.querySelector('[data-tab="dashboard"]').classList.toggle('hidden', state.role !== 'manager');
+    document.querySelectorAll('.tab-btn').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+    document.getElementById('weekPrev').onclick = () => { state.week = Math.max(1, state.week - 1); refresh(); };
+    document.getElementById('weekNext').onclick = () => { state.week = Math.min(D.weeks, state.week + 1); refresh(); };
+    document.getElementById('themeToggle').onclick = toggleTheme;
+    document.getElementById('logoutBtn').onclick = () => location.reload();
+    document.getElementById('addOther').onclick = addOther;
+    document.getElementById('saveDraft').onclick = () => { collectCheckin(); saveReports(); flashSaved(); };
+    document.getElementById('submitReport').onclick = submitReport;
+    switchTab('gantt');
+    refresh();
+  }
+  function switchTab(tab) {
+    state.tab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b =>
+      b.classList.toggle('bg-blue-600', b.dataset.tab === tab) || b.classList.toggle('text-white', b.dataset.tab === tab));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.getElementById('tab-' + tab).classList.remove('hidden');
+    refresh();
+  }
+  function toggleTheme() {
+    const dark = document.documentElement.classList.toggle('dark');
+    localStorage.theme = dark ? 'dark' : 'light';
+  }
+  function refresh() {
+    document.getElementById('weekLabel').textContent = `W${String(state.week).padStart(2, '0')} ${weekDates(state.week)}`;
+    if (state.tab === 'gantt') renderGantt();
+    if (state.tab === 'checkin') renderCheckin();
+    if (state.tab === 'dashboard') renderDashboard();
+    lucide.createIcons();
+  }
+
+  // ---------- Gantt ----------
+  function renderGantt() {
+    const rep = getReport(state.week, state.user);
+    // header
+    let mh = `<div class="gantt-grid sticky top-0"><div class="bg-slate-800 text-white text-sm font-semibold flex items-center px-3">專案 / 負責人</div>`;
+    D.months.forEach(m => {
+      mh += `<div style="grid-column: span ${m.span}" class="bg-slate-800 text-white text-[11px] flex items-center justify-center border-l border-slate-600">${m.label}</div>`;
+    });
+    mh += `</div><div class="gantt-grid"><div class="bg-slate-700 text-white text-xs flex items-center px-3">W01–W53</div>`;
+    for (let w = 1; w <= D.weeks; w++) {
+      mh += `<div class="text-[9px] text-center border-l border-slate-200 dark:border-slate-700 ${w === state.week ? 'wk-now font-bold text-blue-600' : 'text-slate-400'}">${w}</div>`;
+    }
+    mh += `</div>`;
+    document.getElementById('ganttHead').innerHTML = mh;
+
+    // body grouped by owner
+    let body = '';
+    D.owners.forEach(owner => {
+      body += `<div class="gantt-grid"><div style="grid-column: 1 / -1" class="bg-slate-100 dark:bg-slate-700/60 text-xs font-semibold px-3 py-1 border-t border-slate-200 dark:border-slate-600">${owner}</div></div>`;
+      projectsOf(owner).forEach(p => {
+        const done = !!rep.projects[p.id] && (state.user === owner);
+        body += `<div class="gantt-grid border-t border-slate-100 dark:border-slate-700/60 hover:bg-slate-50 dark:hover:bg-slate-700/30">`;
+        body += `<div class="text-xs px-3 py-1 flex items-center gap-1 truncate ${done ? 'ring-2 ring-green-500 rounded' : ''}">
+                   <span class="text-slate-400">${p.no}</span>
+                   <span class="px-1 rounded bg-slate-100 dark:bg-slate-700 text-[10px]">${p.category}</span>
+                   <span class="truncate" title="${esc(p.name)}">${esc(p.name)}</span></div>`;
+        // week background cells
+        for (let w = 1; w <= D.weeks; w++) {
+          body += `<div style="grid-column:${w + 1}" class="${w === state.week ? 'wk-now' : ''} border-l border-slate-50 dark:border-slate-800"></div>`;
+        }
+        // bars overlaid
+        p.bars.forEach(b => {
+          body += `<div class="bar ${COLOR[b.color]}" style="grid-column:${b.start + 1} / ${b.end + 2}; grid-row:1" title="${esc(b.text)}">${esc(b.text)}</div>`;
+        });
+        body += `</div>`;
+      });
+    });
+    document.getElementById('ganttBody').innerHTML = body;
+  }
+
+  // ---------- Check-in ----------
+  function renderCheckin() {
+    const rep = getReport(state.week, state.user);
+    document.getElementById('ciUser').textContent = state.user;
+    document.getElementById('ciWeek').textContent = `W${String(state.week).padStart(2, '0')} · ${weekDates(state.week)}`;
+    const wrap = document.getElementById('ciProjects');
+    wrap.innerHTML = projectsOf(state.user).map(p => {
+      const r = rep.projects[p.id] || {};
+      const on = !!rep.projects[p.id];
+      return `<div class="p-3 rounded-xl border ${on ? 'border-blue-400 bg-blue-50/40 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" class="ci-on w-4 h-4" data-pid="${p.id}" ${on ? 'checked' : ''}>
+          <span class="px-1.5 rounded bg-slate-100 dark:bg-slate-700 text-[10px]">${p.category}</span>
+          <span class="font-medium text-sm">${esc(p.name)}</span>
+        </label>
+        <div class="ci-detail mt-2 ${on ? '' : 'hidden'} pl-6 flex gap-2">
+          <textarea class="ci-text flex-1 text-sm px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700" rows="2" data-pid="${p.id}" placeholder="本週在此專案做了什麼？">${esc(r.text || '')}</textarea>
+          <select class="ci-status text-sm px-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700" data-pid="${p.id}">
+            ${STATUS.map(s => `<option ${r.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>`;
+    }).join('');
+    wrap.querySelectorAll('.ci-on').forEach(cb => cb.onchange = e => {
+      const box = e.target.closest('.p-3'); const det = box.querySelector('.ci-detail');
+      det.classList.toggle('hidden', !e.target.checked);
+      box.classList.toggle('border-blue-400', e.target.checked);
+    });
+    renderOthers(rep);
+    document.getElementById('ciSaved').classList.toggle('hidden', !rep.submitted);
+  }
+  function renderOthers(rep) {
+    const wrap = document.getElementById('ciOthers');
+    wrap.innerHTML = rep.others.map((o, i) => `
+      <div class="p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-900/10 flex gap-2">
+        <input class="ci-otitle w-48 text-sm px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700" data-i="${i}" placeholder="項目名稱" value="${esc(o.title || '')}">
+        <textarea class="ci-otext flex-1 text-sm px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700" rows="1" data-i="${i}" placeholder="做了什麼？">${esc(o.text || '')}</textarea>
+        <button class="ci-odel px-2 text-red-500" data-i="${i}"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      </div>`).join('') || `<p class="text-sm text-slate-400">尚無其他項目。</p>`;
+    wrap.querySelectorAll('.ci-odel').forEach(b => b.onclick = () => { collectCheckin(); rep.others.splice(+b.dataset.i, 1); renderOthers(rep); lucide.createIcons(); });
+    lucide.createIcons();
+  }
+  function addOther() { const rep = getReport(state.week, state.user); collectCheckin(); rep.others.push({ title: '', text: '' }); renderOthers(rep); }
+  function collectCheckin() {
+    const rep = getReport(state.week, state.user);
+    const projs = {};
+    document.querySelectorAll('#ciProjects .ci-on').forEach(cb => {
+      if (cb.checked) {
+        const pid = cb.dataset.pid;
+        projs[pid] = {
+          text: document.querySelector(`.ci-text[data-pid="${pid}"]`)?.value || '',
+          status: document.querySelector(`.ci-status[data-pid="${pid}"]`)?.value || STATUS[1],
+        };
+      }
+    });
+    rep.projects = projs;
+    document.querySelectorAll('#ciOthers .ci-otitle').forEach(inp => {
+      const i = +inp.dataset.i; if (rep.others[i]) rep.others[i].title = inp.value;
+    });
+    document.querySelectorAll('#ciOthers .ci-otext').forEach(inp => {
+      const i = +inp.dataset.i; if (rep.others[i]) rep.others[i].text = inp.value;
+    });
+  }
+  function submitReport() {
+    collectCheckin();
+    const rep = getReport(state.week, state.user);
+    rep.submitted = true; rep.ts = new Date().toISOString();
+    saveReports(); flashSaved(); renderCheckin(); lucide.createIcons();
+  }
+  function flashSaved() {
+    const el = document.getElementById('ciSaved'); el.classList.remove('hidden');
+    setTimeout(() => { if (!getReport(state.week, state.user).submitted) el.classList.add('hidden'); }, 2000);
+  }
+
+  // ---------- Dashboard ----------
+  function renderDashboard() {
+    const week = state.week;
+    let totalReported = 0, totalOthers = 0, membersDone = 0;
+    const cards = document.getElementById('dashCards');
+    const members = document.getElementById('dashMembers');
+    let html = '';
+    D.owners.forEach(owner => {
+      const rep = state.reports[reportKey(week, owner)];
+      const done = rep && rep.submitted;
+      const pcount = rep ? Object.keys(rep.projects).length : 0;
+      const ocount = rep ? rep.others.filter(o => o.title || o.text).length : 0;
+      const total = projectsOf(owner).length;
+      totalReported += pcount; totalOthers += ocount; if (done) membersDone++;
+      html += `<div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+        <div class="flex items-center gap-2 px-4 py-2 border-b border-slate-100 dark:border-slate-700">
+          <span class="font-semibold">${owner}</span>
+          <span class="text-xs px-2 py-0.5 rounded-full ${done ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}">${done ? '已送出' : (pcount || ocount ? '草稿' : '未回報')}</span>
+          <span class="ml-auto text-xs text-slate-400">回報 ${pcount}/${total} 專案 · 其他 ${ocount}</span>
+        </div>
+        <div class="p-4 space-y-1.5 text-sm">`;
+      if (rep && (pcount || ocount)) {
+        Object.entries(rep.projects).forEach(([pid, r]) => {
+          const p = D.projects.find(x => x.id === pid);
+          html += `<div class="flex gap-2"><span class="px-1.5 rounded bg-blue-100 dark:bg-blue-900/40 text-[11px] whitespace-nowrap">${p ? esc(p.name) : pid}</span>
+                   <span class="text-slate-500">${esc(r.text) || '—'}</span>
+                   <span class="ml-auto text-[11px] text-slate-400">${r.status || ''}</span></div>`;
+        });
+        rep.others.filter(o => o.title || o.text).forEach(o => {
+          html += `<div class="flex gap-2"><span class="px-1.5 rounded bg-amber-100 dark:bg-amber-900/40 text-[11px] whitespace-nowrap">其他·${esc(o.title) || '未命名'}</span>
+                   <span class="text-slate-500">${esc(o.text) || '—'}</span></div>`;
+        });
+      } else {
+        html += `<p class="text-slate-400">本週尚未回報。</p>`;
+      }
+      html += `</div></div>`;
+    });
+    members.innerHTML = html;
+    cards.innerHTML = [
+      ['已回報成員', `${membersDone}/${D.owners.length}`, 'users'],
+      ['本週回報專案數', totalReported, 'clipboard-check'],
+      ['其他項目數', totalOthers, 'folder'],
+      ['當前週次', 'W' + String(week).padStart(2, '0'), 'calendar'],
+    ].map(([t, v, ic]) => `<div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+        <div class="flex items-center gap-2 text-slate-400 text-sm"><i data-lucide="${ic}" class="w-4 h-4"></i>${t}</div>
+        <div class="text-2xl font-bold mt-1">${v}</div></div>`).join('');
+  }
+
+  function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  initLogin();
+  lucide.createIcons();
+  </script>
+</body>
+</html>

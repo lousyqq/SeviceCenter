@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "servicecenter",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--no-launch-profile", "--project", "ServiceCenter", "--urls", "http://127.0.0.1:5278"],
+      "port": 5278
+    }
+  ]
+}
